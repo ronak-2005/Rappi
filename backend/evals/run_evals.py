@@ -50,6 +50,7 @@ def main(argv=None) -> int:
     ap.add_argument("--scenarios", default="S1,S4,S2,S3")
     ap.add_argument("--fixtures", default="")
     ap.add_argument("--no-baseline", action="store_true")
+    ap.add_argument("--pause", type=float, default=0.0, help="seconds to wait between LLM runs (free-tier rate limits)")
     a = ap.parse_args(argv)
     logging.getLogger().setLevel(logging.WARNING)  # service logs are noise here; results print below
 
@@ -66,6 +67,8 @@ def main(argv=None) -> int:
         n = reps if reps > 0 else a.repeats
         for fx in fixtures:
             for i in range(n):
+                if a.pause and label != "baseline":
+                    time.sleep(a.pause)
                 t0 = time.time()
                 with tempfile.TemporaryDirectory() as tmp:
                     try:

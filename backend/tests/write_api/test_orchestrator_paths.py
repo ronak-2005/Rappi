@@ -149,3 +149,11 @@ def test_human_rejection_goes_back_to_the_agent(stack, db_file):
     run = orch.resume(run_id)
     assert run.status == "escalated" and pos(db_file) == []
     assert any("no budget exceptions" in (msg.get("content") or "") for msg in run.memory["messages"])
+
+
+def test_tool_call_written_as_text_is_recovered():
+    from write_api.llm.openai_compat import _calls_from_text
+    calls = _calls_from_text('Sure. {"name": "get_inventory", "arguments": {"node": "CHAP"}} done',
+                             {"get_inventory", "submit_decision"})
+    assert [(c.name, c.arguments) for c in calls] == [("get_inventory", '{"node": "CHAP"}')]
+    assert _calls_from_text('{"name": "rm_rf", "arguments": {}}', {"get_inventory"}) == []

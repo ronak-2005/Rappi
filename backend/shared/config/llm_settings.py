@@ -19,6 +19,7 @@ class LLMSettings(BaseSettings):
     llm_temperature: float = 0.0
     llm_max_tokens: int = 4096
     llm_timeout_s: float = 60.0
+    llm_max_retries: int = 2  # retries with backoff on 429 / 5xx (free tiers: use 5+)
 
     @property
     def label(self) -> str:

@@ -1,7 +1,7 @@
 PY      := backend/.venv/bin/python
 PIP     := backend/.venv/bin/pip
 
-.PHONY: setup dev test smoke eval build-frontend clean
+.PHONY: setup dev test smoke eval llm-check llm-models build-frontend clean
 
 ## Install backend (venv) and frontend (npm) dependencies; create env files if missing
 setup:
@@ -26,8 +26,18 @@ smoke:
 ## Agent evaluation. Example: make eval LLM_ENVS="llm.env evals/llm/other.env" REPEATS=3
 LLM_ENVS ?= llm.env
 REPEATS  ?= 3
+PAUSE    ?= 0
 eval:
-	cd backend && .venv/bin/python -m evals.run_evals --llm-envs $(LLM_ENVS) --repeats $(REPEATS)
+	cd backend && .venv/bin/python -m evals.run_evals --llm-envs $(LLM_ENVS) --repeats $(REPEATS) --pause $(PAUSE)
+
+## Does this LLM env work and support tool calls?  make llm-check ENV=llm-examples/x.env
+ENV ?= llm.env
+llm-check:
+	cd backend && .venv/bin/python -m evals.llm_check $(ENV)
+
+## List the model ids an endpoint offers:  make llm-models ENV=llm-examples/groq.env
+llm-models:
+	cd backend && .venv/bin/python -m evals.llm_check $(ENV) --models
 
 build-frontend:
 	cd frontend && npm run build
