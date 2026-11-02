@@ -46,7 +46,7 @@ expected:
   approval_required: false
   pos_created: 1
   final_verification: [OK]
-  key_factors: [open_po_ignored, budget, storage]
+  key_factors: [open_po_ignored, budget, storage, shelf_life]
   notes: |
     Horizon = lead 3 + review 7 = 10 days → demand 1000.
     Safety stock = 1.65 × √(10 × 30²) = 156.5 → 157.
@@ -54,4 +54,7 @@ expected:
     800 ≈ 1157 − 300: the recommendation ignored PO-1001.
     Budget: 500 × 1.20 = 600 ≤ 700 left; 800 × 1.20 = 960 > 700.
     Storage on arrival (day 3, before sales): 400 + 500 = 900 L ≤ 900 L free; 800 → 1200 L.
+    Shelf life (found by the engine, missed in the first hand calculation): with 800, PO-1001's 400
+    sell first (days 3–6), the new lot sells days 7–13 (700) and is written off on day 14 (3 + 12 − 1)
+    → 100 units (12.5%) expire > 5% limit. With 500 nothing expires.
     Day-9 close = 300 + 400 + 500 − 1000 = 200 ≥ SS 157.
