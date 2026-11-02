@@ -1,0 +1,47 @@
+id: s1_investigate_phantom_stock
+scenario: S1
+title: "Stock record says 0 but the product keeps selling"
+description: >
+  The system shows 0 units on hand (last counted 21 days ago), so the engine recommends a big
+  order. But ~100 units sold every day this week with no deliveries: the stock record is wrong.
+  Buying 1,160 units on bad data risks overflowing the store; the agent should investigate
+  (request a cycle count) instead of ordering blindly.
+today: 2026-11-02
+now_hour: 10
+
+world:
+  nodes:
+    - {id: CHAP, name: Chapinero, city: Bogotá}
+  storage_zones:
+    - {node: CHAP, zone: chilled, capacity_l: 1800, other_skus_used_l: 600}
+  skus:
+    - {id: MILK1L, name: "Whole milk 1L", category: dairy, zone: chilled, unit_volume_l: 1.0,
+       shelf_life_days: 14, criticality: high, unit_margin: 0.40, review_period_days: 7}
+  inventory:
+    - {node: CHAP, sku: MILK1L, on_hand: 0, last_counted_days_ago: 21}
+  forecasts:
+    - {node: CHAP, sku: MILK1L, units_per_day: 100, sigma: 30, days: 30}
+  sales_history:
+    - {node: CHAP, sku: MILK1L, daily: [97, 104, 99, 95, 108, 102, 96, 101, 99, 103, 94, 100, 105, 98]}
+  suppliers:
+    - {id: SUP_A, name: "Andes Dairy", fill_rate: 0.97, on_time_rate: 0.95, cutoff_hour: 14}
+  supplier_terms:
+    - {supplier: SUP_A, sku: MILK1L, unit_cost: 1.20, moq: 500, case_pack: 20, lead_time_days: 3,
+       express_lead_days: 1, express_premium_per_unit: 0.30, remaining_shelf_life_days: 12}
+  budgets:
+    - {node: CHAP, category: dairy, total: 3000, committed: 0}
+
+trigger:
+  type: recommendation
+  recommendation: {id: REC-103, node: CHAP, sku: MILK1L, qty: 1160, supplier: SUP_A}
+
+expected:
+  decision: [investigate, escalate]
+  qty_range: [0, 0]
+  required_tools: [get_inventory, get_sales_history, check_data_quality]
+  pos_created: 0
+  key_factors: [sales_while_zero_stock, stale_count]
+  notes: |
+    Inventory 0 with no receipts, yet 98 units sold yesterday (and ~100/day for 14 days) → the
+    record is wrong (phantom inventory in reverse). Last count 21 days ago > 7-day staleness limit.
+    The true stock is unknown, so any quantity is a guess → investigate (cycle count) / escalate.

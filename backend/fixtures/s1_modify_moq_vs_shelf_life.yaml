@@ -1,0 +1,58 @@
+id: s1_modify_moq_vs_shelf_life
+scenario: S1
+title: "Cheapest supplier's MOQ would expire on the shelf"
+description: >
+  The engine recommends 600 yogurts from the cheapest supplier (its MOQ). The store only sells 40
+  a day and yogurt arrives with 10 days of shelf life, so ~260 would expire. A second supplier
+  has a low MOQ at a higher unit price; buying the real need there is cheaper overall.
+today: 2026-11-02
+now_hour: 10
+
+world:
+  nodes:
+    - {id: CHAP, name: Chapinero, city: Bogotá}
+  storage_zones:
+    - {node: CHAP, zone: chilled, capacity_l: 600, other_skus_used_l: 300}
+  skus:
+    - {id: YOG150, name: "Greek yogurt 150g", category: dairy, zone: chilled, unit_volume_l: 0.2,
+       shelf_life_days: 21, criticality: medium, unit_margin: 0.35, review_period_days: 7}
+  inventory:
+    - {node: CHAP, sku: YOG150, on_hand: 100, last_counted_days_ago: 1, remaining_shelf_life_days: 5}
+  forecasts:
+    - {node: CHAP, sku: YOG150, units_per_day: 40, sigma: 12, days: 30}
+  sales_history:
+    - {node: CHAP, sku: YOG150, daily: [41, 38, 44, 39, 36, 42, 40, 43, 37, 40, 39, 42, 38, 41]}
+  suppliers:
+    - {id: SUP_A, name: "Andes Dairy", fill_rate: 0.97, on_time_rate: 0.95, cutoff_hour: 14}
+    - {id: SUP_B, name: "Lácteos del Valle", fill_rate: 0.95, on_time_rate: 0.93, cutoff_hour: 15}
+  supplier_terms:
+    - {supplier: SUP_A, sku: YOG150, unit_cost: 0.80, moq: 600, case_pack: 50, lead_time_days: 2,
+       remaining_shelf_life_days: 10}
+    - {supplier: SUP_B, sku: YOG150, unit_cost: 0.95, moq: 100, case_pack: 10, lead_time_days: 2,
+       remaining_shelf_life_days: 10}
+  budgets:
+    - {node: CHAP, category: dairy, total: 1000, committed: 200}
+
+trigger:
+  type: recommendation
+  recommendation: {id: REC-104, node: CHAP, sku: YOG150, qty: 600, supplier: SUP_A}
+
+expected:
+  decision: [modify]
+  qty_range: [320, 330]
+  lines: 1
+  supplier: SUP_B
+  required_tools: [get_inventory, get_supplier_terms, get_sku_profile]
+  approval_required: false
+  pos_created: 1
+  final_verification: [OK]
+  key_factors: [shelf_life, moq, alternate_supplier]
+  notes: |
+    Horizon = 2 + 7 = 9 days → demand 360. SS = 1.65 × √(9 × 12²) = 59.4 → 60.
+    Need = 360 + 60 − 100 = 320 (SUP_B case 10 → 320, MOQ 100 OK).
+    Shelf-life convention: a lot arriving on day a with r days left is written off at the start of
+    day a + r − 1 (1-day sell buffer), i.e. it must sell by day a + r − 2.
+    SUP_A 600: arrives day 2 with 10 days left → must sell by day 10. Days 2–10 sell 360, the first
+    20 from old stock → 340 of the new lot sell → 260 expire (43% > 5% limit).
+    SUP_B 320: 340 sellable ≥ 320 → zero waste.
+    Cost: SUP_A 480 (208 of it wasted) vs SUP_B 320 × 0.95 = 304.

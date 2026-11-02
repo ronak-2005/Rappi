@@ -1,0 +1,47 @@
+id: s4_moq_exceeds_shelf_life
+scenario: S4
+title: "Only supplier's MOQ would mostly expire"
+description: >
+  Yogurt need is 320, the only supplier's MOQ is 600, and 260 of those would expire. Buying below
+  MOQ is impossible and buying the MOQ breaks the shelf-life rule. No feasible plan exists, so the
+  agent must escalate (e.g. ask for an MOQ exception or approve a known write-off), not blindly order.
+today: 2026-11-02
+now_hour: 10
+
+world:
+  nodes:
+    - {id: CHAP, name: Chapinero, city: Bogotá}
+  storage_zones:
+    - {node: CHAP, zone: chilled, capacity_l: 600, other_skus_used_l: 300}
+  skus:
+    - {id: YOG150, name: "Greek yogurt 150g", category: dairy, zone: chilled, unit_volume_l: 0.2,
+       shelf_life_days: 21, criticality: medium, unit_margin: 0.35, review_period_days: 7}
+  inventory:
+    - {node: CHAP, sku: YOG150, on_hand: 100, last_counted_days_ago: 1, remaining_shelf_life_days: 5}
+  forecasts:
+    - {node: CHAP, sku: YOG150, units_per_day: 40, sigma: 12, days: 30}
+  sales_history:
+    - {node: CHAP, sku: YOG150, daily: [41, 38, 44, 39, 36, 42, 40, 43, 37, 40, 39, 42, 38, 41]}
+  suppliers:
+    - {id: SUP_A, name: "Andes Dairy", fill_rate: 0.97, on_time_rate: 0.95, cutoff_hour: 14}
+  supplier_terms:
+    - {supplier: SUP_A, sku: YOG150, unit_cost: 0.80, moq: 600, case_pack: 50, lead_time_days: 2,
+       remaining_shelf_life_days: 10}
+  budgets:
+    - {node: CHAP, category: dairy, total: 1000, committed: 200}
+
+trigger:
+  type: recommendation
+  recommendation: {id: REC-404, node: CHAP, sku: YOG150, qty: 600, supplier: SUP_A}
+
+expected:
+  decision: [escalate, investigate]
+  qty_range: [0, 0]
+  required_tools: [get_supplier_terms, get_sku_profile]
+  pos_created: 0
+  recovery: escalate
+  key_factors: [moq, shelf_life, no_feasible_option]
+  notes: |
+    Need 320 (see s1_modify_moq_vs_shelf_life). Only SUP_A: MOQ 600 → 260 expire (43% > 5% hard
+    limit); 320 < MOQ → hard fail. No feasible option → escalate with the tradeoff spelled out
+    (stock lasts until ~day 2, so the human must decide quickly).

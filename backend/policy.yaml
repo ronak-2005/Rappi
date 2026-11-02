@@ -1,0 +1,36 @@
+# Business policy: every threshold the system uses, in one place.
+# Changing a number here changes behaviour without code changes.
+
+planning:
+  service_level_z: 1.65          # ~95% cycle service level
+  default_review_period_days: 7
+  accept_tolerance_pct: 5        # recommendation within ±5% of our computed quantity → "accept"
+  shelf_life_sell_buffer_days: 1 # a unit must sell at least this many days before it expires
+
+costs:
+  holding_cost_pct_per_day: 0.1  # % of unit cost per unit per day held
+  stockout_cost_multiplier: 2.0  # lost sale costs margin × this (customer churn in quick-commerce)
+
+data_quality:
+  stale_count_days: 7            # inventory not counted for longer than this is suspicious
+  forecast_vs_sales_ratio_max: 1.5   # forecast more than 1.5× (or less than 1/1.5×) recent sales is suspicious
+
+hard_rules:
+  max_expiry_waste_pct: 5        # projected units expiring / units ordered
+
+soft_rules:                      # breaking any of these needs human approval
+  po_value_over: 2000            # total value of the plan
+  increase_over_recommendation_pct: 30   # spending MORE than the system suggested
+  express_premium_total_over: 100
+  min_supplier_fill_rate: 0.85
+
+loop_limits:
+  max_tool_calls: 25
+  max_revisions: 2               # validator rejections before escalation
+  max_replans: 2                 # failed verifications before escalation
+  max_llm_format_retries: 2
+
+verification:
+  # after execution, the projection is re-run with what the supplier actually confirmed
+  unacceptable_if_lost_units_over: 0
+  degraded_ok_if_min_stock_over_ss_pct: 50   # dips below SS but stays above 50% of SS → DEGRADED_OK
