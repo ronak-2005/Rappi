@@ -52,3 +52,24 @@ def test_llm_health_without_key(apis):
 def test_unknown_fixture_is_404(apis):
     _, write = apis
     assert write.post("/fixtures/nope/load").status_code == 404
+
+
+def test_supplier_event_webhook_runs_agent(apis):
+    read, write = apis
+    write.post("/fixtures/s2_alt_supplier/load")
+    # a second shortfall on the new world: the existing PO is now fully refused
+    r = write.post("/supplier-events", json={"po_id": "PO-3001", "confirmed_qty": 0,
+                                            "message": "Cancelled: plant shutdown.", "llm_mode": "baseline"}).json()
+    assert r["applied"]
+    pos = {p["id"]: p for p in read.get("/purchase-orders").json()}
+    assert pos["PO-3001"]["status"] == "rejected"
+    run = read.get(f"/runs/{r['run_id']}").json()
+    assert run["trigger_type"] == "supplier_event" and run["status"] in ("completed", "escalated")
+
+
+def test_missing_llm_config_is_a_clear_503(apis, tmp_path):
+    _, write = apis
+    empty = tmp_path / "empty.env"
+    empty.write_text("LLM_MODE=live\n")
+    r = write.post("/runs", json={"fixture_id": "s1_accept", "llm_env": str(empty)})
+    assert r.status_code == 503 and "llm.env" in r.json()["error"]["message"]

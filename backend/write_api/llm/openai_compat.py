@@ -7,6 +7,7 @@ import logging
 from openai import OpenAI
 
 from shared.config.llm_settings import LLMSettings
+from shared.domain.errors import ConfigurationError
 from write_api.llm.client import LLMResponse, ToolCall
 
 log = logging.getLogger("write_api.llm.openai_compat")
@@ -15,7 +16,8 @@ log = logging.getLogger("write_api.llm.openai_compat")
 class OpenAICompatClient:
     def __init__(self, settings: LLMSettings):
         if not settings.llm_base_url or not settings.llm_model:
-            raise ValueError("LLM_BASE_URL and LLM_MODEL must be set in llm.env (or use LLM_MODE=baseline)")
+            raise ConfigurationError("live LLM not configured: set LLM_BASE_URL, LLM_API_KEY and LLM_MODEL in "
+                                     "backend/llm.env, or run with llm_mode=baseline", "write_api.llm.openai_compat")
         self.settings = settings
         self.model = settings.llm_model
         self._client = OpenAI(base_url=settings.llm_base_url, api_key=settings.llm_api_key or "none",

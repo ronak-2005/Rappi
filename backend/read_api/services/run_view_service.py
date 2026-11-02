@@ -27,6 +27,7 @@ def run_detail(session: Session, run_id: str) -> dict:
         "finished": r.status in FINISHED,
         "purchase_orders": [{**p.model_dump(), "events": [e.model_dump() for e in orders.po_events(session, p.id)]}
                             for p in orders.purchase_orders(session, run_id=run_id)],
+        "transfers": [t.model_dump() for t in orders.transfers(session, run_id=run_id)],
         "approvals": [a.model_dump() for a in runs.approvals(session, run_id=run_id)],
     }
 

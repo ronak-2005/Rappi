@@ -9,7 +9,7 @@ from sqlmodel import Session
 from read_api.repositories import stock_repository as stock
 from shared.config.policy import Policy
 from shared.db import snapshot
-from shared.domain.planning import Plan
+from shared.domain.planning import DemandAssumption, Plan
 from shared.engine import data_quality
 from shared.engine.options import OptionContext, evaluate_plan, evaluate_with_projection, generate_options, requirement
 
@@ -18,8 +18,9 @@ def _day(ctx: OptionContext, d: int) -> str:
     return (ctx.today + timedelta(days=d)).isoformat()
 
 
-def get_requirement(session: Session, policy: Policy, node: str, sku: str, rec_id: Optional[str] = None) -> dict:
-    ctx = snapshot.build_context(session, node, sku, rec_id)
+def get_requirement(session: Session, policy: Policy, node: str, sku: str, rec_id: Optional[str] = None,
+                    demand: Optional[DemandAssumption] = None) -> dict:
+    ctx = snapshot.build_context(session, node, sku, rec_id, demand_assumption=demand)
     r = requirement(ctx, policy)
     out = r.model_dump()
     out["today"] = ctx.today.isoformat()
@@ -30,6 +31,7 @@ def get_requirement(session: Session, policy: Policy, node: str, sku: str, rec_i
                       f"{r.rounded_for_supplier}'s MOQ {r.moq} / case pack {r.case_pack} → {r.order_qty} "
                       f"(other suppliers round differently: see generate_options)")
     out["open_receipts"] = [x.model_dump() for x in ctx.open_receipts]
+    out["demand_basis"] = ctx.demand_note
     return out
 
 
@@ -39,32 +41,35 @@ def _projection_rows(ctx: OptionContext, proj, days: Optional[int]) -> list[dict
 
 
 def get_projection(session: Session, policy: Policy, node: str, sku: str, plan: Optional[Plan] = None,
-                   rec_id: Optional[str] = None, days: Optional[int] = None) -> dict:
+                   rec_id: Optional[str] = None, days: Optional[int] = None,
+                   demand: Optional[DemandAssumption] = None) -> dict:
     """Day-by-day stock if we do nothing (plan=None) or if we execute `plan`."""
-    ctx = snapshot.build_context(session, node, sku, rec_id)
+    ctx = snapshot.build_context(session, node, sku, rec_id, demand_assumption=demand)
     ev, proj = evaluate_with_projection(ctx, policy, plan or Plan())
     return {"today": ctx.today.isoformat(), "safety_stock": proj.safety_stock, "horizon_days": proj.horizon_days,
-            "summary": {k: v for k, v in ev.model_dump().items()
+            "demand_basis": ctx.demand_note, "summary": {k: v for k, v in ev.model_dump().items()
                         if k in ("lost_units", "expired_units", "min_close", "end_close", "over_capacity_days",
                                  "below_ss_days", "hard_ok", "soft_issues", "checks")},
             "days": _projection_rows(ctx, proj, days)}
 
 
-def get_options(session: Session, policy: Policy, node: str, sku: str, rec_id: Optional[str] = None) -> dict:
-    ctx = snapshot.build_context(session, node, sku, rec_id)
+def get_options(session: Session, policy: Policy, node: str, sku: str, rec_id: Optional[str] = None,
+                demand: Optional[DemandAssumption] = None) -> dict:
+    ctx = snapshot.build_context(session, node, sku, rec_id, demand_assumption=demand)
     opts = generate_options(ctx, policy)
     for o in opts:
         for ln in o.plan.lines:
             if ln.delivery_day is not None:
                 ln_date = _day(ctx, ln.delivery_day)
                 o.notes.append(f"{ln.supplier_id} {ln.qty} delivered {ln_date}")
-    return {"today": ctx.today.isoformat(),
+    return {"today": ctx.today.isoformat(), "demand_basis": ctx.demand_note,
             "ranking": "hard-feasible first, then fewest soft issues (each needs human approval), then lowest decision cost",
             "options": [o.model_dump() for o in opts]}
 
 
-def evaluate(session: Session, policy: Policy, node: str, sku: str, plan: Plan, rec_id: Optional[str] = None) -> dict:
-    ctx = snapshot.build_context(session, node, sku, rec_id)
+def evaluate(session: Session, policy: Policy, node: str, sku: str, plan: Plan, rec_id: Optional[str] = None,
+             demand: Optional[DemandAssumption] = None) -> dict:
+    ctx = snapshot.build_context(session, node, sku, rec_id, demand_assumption=demand)
     return evaluate_plan(ctx, policy, plan).model_dump()
 
 
@@ -84,3 +89,8 @@ def get_data_quality(session: Session, policy: Policy, node: str, sku: str) -> d
     )
     return {"node": node, "sku": sku, "today": today.isoformat(), "ok": not anomalies,
             "anomalies": [a.model_dump() for a in anomalies]}
+
+
+def get_demand_signal(session: Session, node: str, sku: str) -> dict:
+    return {"node": node, "sku": sku, "today": snapshot.world(session).today.isoformat(),
+            **snapshot.demand_signal(session, node, sku).model_dump()}

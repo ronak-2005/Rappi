@@ -20,7 +20,7 @@ def insert_world(session: Session, fx: FixtureSpec) -> None:
     day = lambda offset: today + timedelta(days=offset)  # noqa: E731
 
     session.add(m.World(fixture_id=fx.id, today=today, now_hour=fx.now_hour))
-    session.add_all(m.Node(id=n.id, name=n.name, city=n.city) for n in w.nodes)
+    session.add_all(m.Node(**n.model_dump()) for n in w.nodes)
 
     for z in w.storage_zones:
         session.add(m.StorageZone(node_id=z.node, zone=z.zone, capacity_l=z.capacity_l))
@@ -94,5 +94,14 @@ def insert_world(session: Session, fx: FixtureSpec) -> None:
             id=rec.id, node_id=rec.node, sku_id=rec.sku, qty=rec.qty, supplier_id=rec.supplier,
             source=rec.source, created_at=today,
         ))
+
+    ev = fx.trigger.supplier_event
+    if ev:
+        po = next(p for p in w.open_pos if p.id == ev.po_id)
+        session.add(m.SupplierEvent(id=ev.id, po_id=ev.po_id, supplier_id=po.supplier, node_id=po.node, sku_id=po.sku,
+                                    confirmed_qty=ev.confirmed_qty, message=ev.message, received_on=today))
+    al = fx.trigger.demand_alert
+    if al:
+        session.add(m.DemandAlert(id=al.id, node_id=al.node, sku_id=al.sku, message=al.message, raised_on=today))
 
     session.commit()

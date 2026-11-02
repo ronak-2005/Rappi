@@ -50,7 +50,7 @@ def run_fixture(fixture_id: str, db_file: str, *, llm_settings: Optional[LLMSett
     if llm is not None:
         deps.llm = llm
     orch = Orchestrator(deps)
-    run_id = orch.start(fx.trigger.recommendation.id)
+    run_id = orch.start(fx.trigger.ref, fx.trigger.type)
     orch.run(run_id)
     with read_write(db_file) as s:
         run = s.get(m.AgentRun, run_id).model_dump()

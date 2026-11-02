@@ -35,6 +35,35 @@ def situation(session: Session, recommendation_id: str) -> dict:
     }
 
 
+def supplier_event_situation(session: Session, event_id: str) -> dict:
+    from shared.db import models as m
+    ev = session.get(m.SupplierEvent, event_id)
+    if ev is None:
+        raise NotFoundError("supplier_event", event_id)
+    po = session.get(m.PurchaseOrder, ev.po_id)
+    return {
+        "type": "supplier_shortfall", "today": _today(session).isoformat(),
+        "event": {"id": ev.id, "supplier": ev.supplier_id, "node": ev.node_id, "sku": ev.sku_id,
+                  "message": ev.message, "received_on": ev.received_on.isoformat()},
+        "purchase_order": {"id": po.id, "qty_ordered": po.qty_ordered, "qty_confirmed": po.qty_confirmed,
+                           "status": po.status, "expected_delivery": po.expected_delivery.isoformat()},
+        "question": "The supplier cannot deliver the full order. What, if anything, should happen next?",
+    }
+
+
+def demand_alert_situation(session: Session, alert_id: str) -> dict:
+    from shared.db import models as m
+    al = session.get(m.DemandAlert, alert_id)
+    if al is None:
+        raise NotFoundError("demand_alert", alert_id)
+    return {
+        "type": "demand_change", "today": _today(session).isoformat(),
+        "alert": {"id": al.id, "node": al.node_id, "sku": al.sku_id, "message": al.message,
+                  "raised_on": al.raised_on.isoformat()},
+        "question": "Sales diverge from the forecast. Does the purchasing plan need to change?",
+    }
+
+
 def sku_profile(session: Session, sku_id: str) -> dict:
     s = catalog.sku(session, sku_id)
     if s is None:
@@ -137,5 +166,12 @@ def storage_status(session: Session, node_id: str, zone: str, days: int = 10) ->
 
 
 def other_nodes_stock(session: Session, sku_id: str, exclude_node: str) -> dict:
-    return {"sku": sku_id, "nodes": [{"node": i.node_id, "on_hand": i.on_hand}
-                                     for i in stock.inventory_other_nodes(session, sku_id, exclude_node)]}
+    from shared.config.policy import get_policy
+    surplus = {t.node_id: t for t in snapshot.transfer_sources(session, exclude_node, sku_id, get_policy())}
+    return {"sku": sku_id, "to_node": exclude_node,
+            "note": "can_spare = stock beyond that store's own need (demand + safety stock over its protection interval)",
+            "nodes": [{"node": i.node_id, "on_hand": i.on_hand,
+                       "can_spare": surplus[i.node_id].surplus if i.node_id in surplus else 0,
+                       "transfer_lead_days": surplus[i.node_id].lead_days if i.node_id in surplus else None,
+                       "transfer_cost_per_unit": surplus[i.node_id].cost_per_unit if i.node_id in surplus else None}
+                      for i in stock.inventory_other_nodes(session, sku_id, exclude_node)]}

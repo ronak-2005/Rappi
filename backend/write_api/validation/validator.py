@@ -9,24 +9,28 @@ from sqlmodel import Session
 from shared.config.policy import Policy
 from shared.db import snapshot
 from shared.domain.decision import ValidationReport
-from shared.domain.planning import Plan, PlanLine
+from shared.domain.planning import DemandAssumption, Plan, PlanLine, TransferLine
 from shared.engine.options import earliest_arrival, evaluate_plan
 from write_api.repositories import order_repository
 from write_api.validation.rules.base import RuleInput
-from write_api.validation.rules.hard import capacity, delivery_calendar, duplicate_po, moq_pack, shelf_life, supplier
-from write_api.validation.rules.soft import (below_safety_stock, budget, express_premium, increase_over_recommendation,
-                                             po_value, stockout, supplier_reliability)
+from write_api.validation.rules.hard import (capacity, delivery_calendar, duplicate_po, moq_pack, shelf_life, supplier,
+                                             supplier_availability, transfer_source)
+from write_api.validation.rules.soft import (below_safety_stock, budget, express_premium, forecast_override,
+                                             increase_over_recommendation, po_value, stockout, supplier_reliability)
 
-HARD_RULES = [supplier.check, moq_pack.check, delivery_calendar.check, capacity.check, shelf_life.check,
-              duplicate_po.check]
+HARD_RULES = [supplier.check, supplier_availability.check, moq_pack.check, delivery_calendar.check, capacity.check,
+              shelf_life.check, duplicate_po.check, transfer_source.check]
 SOFT_RULES = [budget.check, stockout.check, below_safety_stock.check, po_value.check,
-              increase_over_recommendation.check, express_premium.check, supplier_reliability.check]
+              increase_over_recommendation.check, express_premium.check, supplier_reliability.check,
+              forecast_override.check]
 
 
 def validate(session: Session, policy: Policy, node: str, sku: str, lines: list[PlanLine],
-             recommendation_id: Optional[str] = None) -> ValidationReport:
-    ctx = snapshot.build_context(session, node, sku, recommendation_id)
-    evaluation = evaluate_plan(ctx, policy, Plan(lines=lines))
+             recommendation_id: Optional[str] = None, transfers: Optional[list[TransferLine]] = None,
+             demand: Optional[DemandAssumption] = None) -> ValidationReport:
+    transfers = transfers or []
+    ctx = snapshot.build_context(session, node, sku, recommendation_id, demand_assumption=demand)
+    evaluation = evaluate_plan(ctx, policy, Plan(lines=lines, transfers=transfers))
 
     duplicates = []
     for ln in lines:
@@ -41,10 +45,13 @@ def validate(session: Session, policy: Policy, node: str, sku: str, lines: list[
         if po:
             duplicates.append(po.id)
 
-    inp = RuleInput(evaluation=evaluation, ctx=ctx, lines=lines, policy=policy, duplicate_po_ids=duplicates)
-    results = [rule(inp) for rule in HARD_RULES] + ([rule(inp) for rule in SOFT_RULES] if lines else [])
-    if not lines:  # "do nothing" (reject/investigate): only the consequences matter
-        results += [stockout.check(inp), below_safety_stock.check(inp)]
+    inp = RuleInput(evaluation=evaluation, ctx=ctx, lines=lines, policy=policy, duplicate_po_ids=duplicates,
+                    transfers=transfers, demand=demand,
+                    demand_signal=snapshot.demand_signal(session, node, sku) if demand else None)
+    acting = bool(lines or transfers)
+    results = [rule(inp) for rule in HARD_RULES] + ([rule(inp) for rule in SOFT_RULES] if acting else [])
+    if not acting:  # "do nothing" (reject / keep the current plan): only the consequences matter
+        results += [stockout.check(inp), below_safety_stock.check(inp), forecast_override.check(inp)]
     hard = [r for r in results if r.kind == "hard" and not r.passed]
     soft = [r for r in results if r.kind == "soft" and not r.passed]
     return ValidationReport(passed=not hard, requires_approval=bool(soft), hard_failures=hard, soft_violations=soft,

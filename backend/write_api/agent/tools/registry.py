@@ -23,6 +23,8 @@ class ToolContext:
     node: str
     sku: str
     recommendation_id: Optional[str]
+    trigger_type: str = "recommendation"
+    trigger_ref: str = ""
 
 
 @dataclass

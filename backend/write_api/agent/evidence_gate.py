@@ -8,19 +8,31 @@
 from shared.domain.decision import Decision
 
 BUYING = {"get_inventory", "get_open_pos", "get_supplier_terms", "get_budget", "get_storage_status"}
-REQUIRED: dict[str, set[str]] = {
-    "accept": BUYING,
-    "modify": BUYING,
-    "reject": {"get_inventory", "get_open_pos"},
-    "investigate": {"get_inventory"},
-    "escalate": set(),
+COVERAGE = {"get_inventory", "get_open_pos"}
+
+# What must have been looked at, per trigger and decision type.
+REQUIRED: dict[str, dict[str, set[str]]] = {
+    "recommendation": {
+        "accept": BUYING, "modify": BUYING, "reject": COVERAGE, "investigate": {"get_inventory"}, "escalate": set(),
+    },
+    "supplier_event": {  # a shortfall: check coverage AND the alternatives (other suppliers, other stores)
+        "accept": COVERAGE | {"project_inventory"},
+        "modify": BUYING | {"get_other_nodes_stock"},
+        "reject": COVERAGE, "investigate": {"get_inventory"}, "escalate": {"get_supplier_terms", "get_other_nodes_stock"},
+    },
+    "demand_alert": {  # a demand change: the sales evidence and promotions must be examined
+        "accept": COVERAGE | {"get_sales_history", "get_promotions", "analyze_demand"},
+        "modify": BUYING | {"get_sales_history", "get_promotions", "analyze_demand"},
+        "reject": COVERAGE | {"get_sales_history", "analyze_demand"}, "investigate": {"get_sales_history"},
+        "escalate": {"get_sales_history"},
+    },
 }
 
 
-def check(decision: Decision, successful_calls: dict[str, str]) -> dict | None:
+def check(decision: Decision, successful_calls: dict[str, str], trigger_type: str = "recommendation") -> dict | None:
     """successful_calls: tool_call_id → tool name. Returns None if OK, else an error for the model."""
     called = set(successful_calls.values())
-    missing = sorted(REQUIRED[decision.type] - called)
+    missing = sorted(REQUIRED[trigger_type][decision.type] - called)
     cited = [e for r in decision.reasons for e in r.evidence]
     unknown = sorted({e for e in cited if e not in successful_calls})
     problems = {}

@@ -10,7 +10,7 @@ from write_api.repositories import supplier_repository
 def record(session: Session, execution: ExecutionResult) -> list[dict]:
     updates = []
     for ln in execution.lines:
-        if ln.status == "failed" or ln.replayed and ln.attempts == 0:
+        if ln.supplier_id.startswith("transfer:") or ln.status == "failed" or ln.replayed and ln.attempts == 0:
             continue  # no real answer, or a line we already learned from
         ratio = ln.qty_confirmed / ln.qty_requested if ln.qty_requested else 1.0
         on_time = ln.confirmed_delivery is None or ln.confirmed_delivery <= ln.requested_delivery

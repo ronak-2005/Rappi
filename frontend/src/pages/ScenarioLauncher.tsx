@@ -74,6 +74,13 @@ export function ScenarioLauncher({ go }: { go: (hash: string) => void }) {
                   <p className="small">Recommendation: <strong>{f.trigger.recommendation.qty}</strong> × {f.trigger.recommendation.sku} at {f.trigger.recommendation.node}
                     {f.trigger.recommendation.supplier ? ` from ${f.trigger.recommendation.supplier}` : ''}</p>
                 )}
+                {f.trigger.supplier_event && (
+                  <p className="small">Supplier on <span className="mono">{f.trigger.supplier_event.po_id}</span>: confirms
+                    {' '}<strong>{f.trigger.supplier_event.confirmed_qty}</strong> — “{f.trigger.supplier_event.message}”</p>
+                )}
+                {f.trigger.demand_alert && (
+                  <p className="small">Demand alert: “{f.trigger.demand_alert.message}”</p>
+                )}
                 <div className="row">
                   <button disabled={!!busy} onClick={() => start(f.id, 'baseline')}>Run · baseline</button>
                   <button className="primary" disabled={!!busy || !liveReady} onClick={() => start(f.id, 'live')}

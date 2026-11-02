@@ -36,3 +36,25 @@ Lost sales before any supplier could possibly deliver are "unavoidable" and don'
 
 ### D11. Generic LLM endpoint
 Only `LLM_BASE_URL`, `LLM_API_KEY` and `LLM_MODEL` (OpenAI-compatible). No provider names in code. Tool arguments and the decision form are validated in our code, because provider-side strict schemas differ (Claude's compatibility layer ignores `strict`).
+
+### D12. Transfers only take another store's *surplus*
+A store's spare stock = what it holds beyond its own protection-interval need (demand + safety stock).
+Moving more would just move the stockout. Checked as a hard rule (`transfer_source`). Transfers arrive
+in the source store's `transfer_lead_days` and cost a small handling fee in the decision cost.
+
+### D13. A supplier that shorted us is recorded as unavailable
+A partial confirmation, a rejection or a supplier event writes a `SupplierAvailability` limit, so neither
+the engine's options nor the agent can quietly re-order from the same supplier (hard rule
+`supplier_availability`). Before this, the S4 re-plan avoided the shorting supplier only by luck.
+
+### D14. Forecast overrides must be backed by sales evidence
+The engine's `analyze_demand` measures recent sales vs the forecast and classifies the pattern
+(sustained increase, promotion, one-off spike, censored drop, ...). The agent may plan on a different
+demand, but must state it as `demand_assumption`; validation and verification then use the same demand.
+Assuming more than the evidence supports (max of forecast, 7-day and 3-day level, +10%) needs a human
+(soft rule `forecast_override`), so an agent can't inflate demand to justify buying more.
+
+### D15. "accept" means "no change needed" for every trigger
+For a recommendation it means "buy exactly what was recommended"; for a supplier shortfall or demand
+alert it means "the current plan already covers the need". The evidence gate requires a projection
+before accepting a shortfall, and the sales evidence before accepting a demand alert.

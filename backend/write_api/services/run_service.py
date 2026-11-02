@@ -35,8 +35,8 @@ def run_llm_config(db_file: Optional[str], run_id: str) -> tuple[Optional[str], 
         return run.memory.get("llm_env"), run.llm_mode
 
 
-def start(deps: AgentDeps, recommendation_id: str) -> str:
-    return Orchestrator(deps).start(recommendation_id)
+def start(deps: AgentDeps, trigger_ref: str, trigger_type: str = "recommendation") -> str:
+    return Orchestrator(deps).start(trigger_ref, trigger_type)
 
 
 def run(deps: AgentDeps, run_id: str):

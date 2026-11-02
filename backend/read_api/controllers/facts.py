@@ -15,6 +15,16 @@ def situation(rec_id: str, s: Session = Depends(session)):
     return f.situation(s, rec_id)
 
 
+@router.get("/situation/supplier-events/{event_id}")
+def supplier_event(event_id: str, s: Session = Depends(session)):
+    return f.supplier_event_situation(s, event_id)
+
+
+@router.get("/situation/demand-alerts/{alert_id}")
+def demand_alert(alert_id: str, s: Session = Depends(session)):
+    return f.demand_alert_situation(s, alert_id)
+
+
 @router.get("/recommendations")
 def recommendations(s: Session = Depends(session)):
     return [r.model_dump() for r in catalog_repository.recommendations(s)]

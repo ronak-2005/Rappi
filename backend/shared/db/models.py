@@ -24,6 +24,8 @@ class Node(SQLModel, table=True):
     id: str = Field(primary_key=True)
     name: str
     city: str = ""
+    transfer_lead_days: int = 1  # days for stock sent FROM this store to reach another store
+    transfer_cost_per_unit: float = 0.05
 
 
 class StorageZone(SQLModel, table=True):
@@ -178,6 +180,39 @@ class Transfer(SQLModel, table=True):
     eta: date
     status: str = "planned"
     run_id: Optional[str] = None
+
+
+class SupplierAvailability(SQLModel, table=True):
+    """A supplier told us it cannot supply (more of) a SKU until a date. Written by the write side when a
+    supplier answers partially / rejects, or when a supplier event arrives."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    supplier_id: str = Field(index=True)
+    sku_id: str = Field(index=True)
+    available_qty: int = 0
+    until: date
+    note: str = ""
+
+
+# ---------- triggers ----------
+class SupplierEvent(SQLModel, table=True):
+    """Scenario 2 trigger: a supplier says it can't fully deliver an existing PO."""
+    id: str = Field(primary_key=True)
+    po_id: str
+    supplier_id: str
+    node_id: str
+    sku_id: str
+    confirmed_qty: int
+    message: str
+    received_on: date
+
+
+class DemandAlert(SQLModel, table=True):
+    """Scenario 3 trigger: monitoring noticed sales diverging from the forecast."""
+    id: str = Field(primary_key=True)
+    node_id: str
+    sku_id: str
+    message: str
+    raised_on: date
 
 
 # ---------- agent bookkeeping ----------

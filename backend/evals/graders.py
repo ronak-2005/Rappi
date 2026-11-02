@@ -40,10 +40,22 @@ def grade(r: RunRecord) -> list[Check]:
     if e.qty_range is not None:
         q = _qty(d)
         add("quantity", "decision", e.qty_range[0] <= q <= e.qty_range[1], f"got {q}, expected {list(e.qty_range)}")
+    if e.transfers is not None:
+        n = len((d or {}).get("transfers", []) or [])
+        add("transfers", "decision", n == e.transfers, f"got {n} transfer(s), expected {e.transfers}")
+    if e.transfer_qty_range is not None:
+        tq = sum(t["qty"] for t in (d or {}).get("transfers", []) or [])
+        add("transfer_quantity", "decision", e.transfer_qty_range[0] <= tq <= e.transfer_qty_range[1],
+            f"got {tq}, expected {list(e.transfer_qty_range)}")
+    if e.demand_per_day_range is not None:
+        da = (d or {}).get("demand_assumption") or {}
+        per_day = da.get("per_day")
+        add("demand_assumption", "decision", per_day is not None and e.demand_per_day_range[0] <= per_day <= e.demand_per_day_range[1],
+            f"planned on {per_day or 'the forecast'}/day, expected {list(e.demand_per_day_range)}")
     if e.lines is not None and dtype in ("accept", "modify"):
         n = len((d or {}).get("lines", []))
         add("order_lines", "decision", n == e.lines, f"got {n} line(s), expected {e.lines}")
-    if e.supplier and dtype in ("accept", "modify"):
+    if e.supplier and dtype in ("accept", "modify") and (d or {}).get("lines"):
         sups = {ln["supplier_id"] for ln in d.get("lines", [])}
         add("supplier", "decision", sups == {e.supplier}, f"got {sorted(sups)}, expected {e.supplier}")
 

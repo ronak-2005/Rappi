@@ -26,10 +26,10 @@ export function RunView({ runId }: { runId: string }) {
   const pending = run?.approvals.find((a) => a.status === 'pending')
 
   useEffect(() => {  // after the supplier answered: projection of the world as it is now
-    if (run?.finished && run.purchase_orders.length && run.context?.node) {
+    if (run?.finished && (run.purchase_orders.length || run.transfers?.length) && run.context?.node) {
       readApi.projection(run.context.node, run.context.sku, [], run.context.recommendation_id).then(setActual).catch(() => {})
     }
-  }, [run?.finished, run?.purchase_orders.length])
+  }, [run?.finished, run?.purchase_orders.length, run?.transfers?.length])
 
   if (!run) return <><ErrorBox error={error} /><p className="muted">Loading run…</p></>
 
@@ -69,6 +69,16 @@ export function RunView({ runId }: { runId: string }) {
                     <tr key={i}><td>{l.supplier_id}</td><td><strong>{l.qty}</strong></td><td>{l.mode}</td>
                       <td>{l.delivery_day != null ? `day +${l.delivery_day}` : 'earliest'}</td></tr>))}</tbody></table>
               )}
+              {!!decision.transfers?.length && (
+                <><h4>Transfers from other stores</h4>
+                <table><thead><tr><th>From</th><th>Qty</th></tr></thead>
+                  <tbody>{decision.transfers.map((t, i) => <tr key={i}><td>{t.from_node}</td><td><strong>{t.qty}</strong></td></tr>)}</tbody></table></>
+              )}
+              {decision.demand_assumption && (
+                <p className="small"><Badge value="demand assumption" tone="warn" /> planned on <strong>{decision.demand_assumption.per_day}/day</strong>
+                  {decision.demand_assumption.until_day != null ? ` until day +${decision.demand_assumption.until_day}, then the forecast` : ' for the whole horizon'}
+                  {decision.demand_assumption.reason ? ` — ${decision.demand_assumption.reason}` : ''}</p>
+              )}
               {!!decision.reasons?.length && <><h4>Why</h4>{decision.reasons.map((r, i) => (
                 <div className="reason" key={i}><strong>{r.factor}</strong>: {r.finding}
                   {!!r.evidence?.length && <span className="mono muted"> [{r.evidence.join(', ')}]</span>}</div>))}</>}
@@ -102,6 +112,16 @@ export function RunView({ runId }: { runId: string }) {
                     <td>{p.qty_confirmed ?? '—'}</td><td>{p.expected_delivery}</td><td><Badge value={p.status} /></td>
                     <td className="small muted">{p.notes}</td></tr>))}</tbody>
               </table></div>
+            </div>
+          )}
+
+          {!!run.transfers?.length && (
+            <div className="card">
+              <h3>Transfers</h3>
+              <table><thead><tr><th>Id</th><th>From → To</th><th>Qty</th><th>Arrives</th><th>Status</th></tr></thead>
+                <tbody>{run.transfers.map((t) => (
+                  <tr key={t.id}><td className="mono">{t.id}</td><td>{t.from_node} → {t.to_node}</td><td>{t.qty}</td>
+                    <td>{t.eta}</td><td><Badge value={t.status} tone="neutral" /></td></tr>))}</tbody></table>
             </div>
           )}
 

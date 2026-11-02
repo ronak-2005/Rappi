@@ -14,7 +14,7 @@ from shared.observability.http import install_error_handlers, install_request_co
 from shared.observability.logging import setup_logging
 from write_api.clients.read_api_client import ReadApiClient
 from write_api.clients.supplier_client import SupplierClient
-from write_api.controllers import approvals, fixtures, runs
+from write_api.controllers import approvals, events, fixtures, runs
 from write_api.server.health import router as health_router
 
 SERVICE = "write_api"
@@ -33,7 +33,7 @@ def create_app(db_file: Optional[str] = None, read_client: Optional[ReadApiClien
                        allow_headers=["*"])
     install_request_context(app)
     install_error_handlers(app, SERVICE)
-    for r in (health_router, fixtures.router, runs.router, approvals.router):
+    for r in (health_router, fixtures.router, runs.router, approvals.router, events.router):
         app.include_router(r)
     return app
 

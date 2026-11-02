@@ -4,7 +4,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
-from shared.domain.planning import Option, PlanLine
+from shared.domain.planning import DemandAssumption, Option, PlanLine, TransferLine
 
 DecisionType = Literal["accept", "modify", "reject", "investigate", "escalate"]
 
@@ -20,7 +20,10 @@ class Decision(BaseModel):
     node: str
     sku: str
     recommendation_id: Optional[str] = None
-    lines: list[PlanLine] = Field(default_factory=list, description="order lines to execute (empty for reject/investigate/escalate)")
+    lines: list[PlanLine] = Field(default_factory=list, description="purchase order lines to place")
+    transfers: list[TransferLine] = Field(default_factory=list, description="stock to move from other dark stores")
+    demand_assumption: Optional[DemandAssumption] = Field(
+        default=None, description="only if you decided the forecast is wrong: the demand per day this plan is built on")
     option_id: Optional[str] = Field(default=None, description="id of the engine option this follows, if any")
     reasons: list[DecisionReason] = Field(min_length=1)
     risks: list[str] = Field(default_factory=list)
@@ -30,10 +33,10 @@ class Decision(BaseModel):
 
     @model_validator(mode="after")
     def _lines_match_type(self):
-        if self.type in ("accept", "modify") and not self.lines:
-            raise ValueError(f"a '{self.type}' decision needs at least one order line")
-        if self.type in ("reject", "investigate", "escalate") and self.lines:
-            raise ValueError(f"a '{self.type}' decision must not contain order lines")
+        if self.type == "modify" and not (self.lines or self.transfers):
+            raise ValueError("a 'modify' decision needs at least one order line or transfer")
+        if self.type in ("reject", "investigate", "escalate") and (self.lines or self.transfers):
+            raise ValueError(f"a '{self.type}' decision must not contain order lines or transfers")
         return self
 
     @property

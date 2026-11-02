@@ -19,8 +19,12 @@ function headline(s: TraceStep): string {
       return p.passed ? (p.requires_approval ? 'rulebook: valid, needs human approval' : 'rulebook: passed') : 'rulebook: REJECTED (hard rule)'
     case 'approval':
       return `approval ${s.name}${p.by ? ` by ${p.by}` : ''}`
-    case 'action':
-      return `placed ${p.lines?.length ?? 0} PO(s): ${(p.lines || []).map((l: any) => `${l.po_id} ${l.qty_confirmed}/${l.qty_requested} ${l.status}`).join('; ')}`
+    case 'action': {
+      const lines = p.lines || []
+      const nT = lines.filter((l: any) => String(l.supplier_id).startsWith('transfer:')).length
+      const parts = [lines.length - nT ? `${lines.length - nT} PO(s)` : '', nT ? `${nT} transfer(s)` : ''].filter(Boolean).join(' + ')
+      return `placed ${parts}: ${lines.map((l: any) => `${l.po_id} ${l.qty_confirmed}/${l.qty_requested} ${l.status}`).join('; ')}`
+    }
     case 'verification':
       return `verification: ${s.name} — ${p.message || ''}`
     default:

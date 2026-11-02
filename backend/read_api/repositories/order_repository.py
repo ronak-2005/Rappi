@@ -29,8 +29,10 @@ def po_events(session: Session, po_id: str) -> list[m.POEvent]:
     return list(session.exec(select(m.POEvent).where(m.POEvent.po_id == po_id).order_by(m.POEvent.at)).all())
 
 
-def transfers(session: Session, sku_id: str | None = None) -> list[m.Transfer]:
+def transfers(session: Session, sku_id: str | None = None, run_id: str | None = None) -> list[m.Transfer]:
     q = select(m.Transfer)
     if sku_id:
         q = q.where(m.Transfer.sku_id == sku_id)
+    if run_id:
+        q = q.where(m.Transfer.run_id == run_id)
     return list(session.exec(q).all())

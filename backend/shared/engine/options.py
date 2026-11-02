@@ -6,16 +6,18 @@ LLM proposes (validate_plan / validator) and for verification after the supplier
 
 `generate_options` builds the sensible candidates a buyer would consider:
   do_nothing · as_recommended · standard (per supplier) · express · bridge (express + standard)
-  · two_drops (storage) · within_budget · waste_free (shelf life)
+  · two_drops (storage) · within_budget · waste_free (shelf life) · transfer (from another dark store)
 """
 
+import math
 from datetime import date
 from typing import Optional
 
 from pydantic import BaseModel
 
 from shared.config.policy import Policy
-from shared.domain.planning import Option, Plan, PlanLine, Projection, Receipt, Requirement, SupplierOffer
+from shared.domain.planning import (Option, Plan, PlanLine, Projection, Receipt, Requirement, SupplierOffer,
+                                    TransferLine, TransferSource)
 from shared.engine.calendar import arrival_day, is_delivery_day
 from shared.engine.cost import decision_cost
 from shared.engine.projection import project
@@ -39,6 +41,12 @@ class OptionContext(BaseModel):
     offers: list[SupplierOffer]
     recommendation_qty: Optional[int] = None
     recommendation_supplier: Optional[str] = None
+    transfer_sources: list[TransferSource] = []
+    demand_note: str = "forecast"  # or a description of the demand assumption in use
+
+
+def can_supply(offer: SupplierOffer) -> bool:
+    return offer.active and (offer.available_qty is None or offer.available_qty >= max(offer.moq, 1))
 
 
 # ---------------------------------------------------------------- helpers
@@ -95,8 +103,9 @@ def _project(ctx: OptionContext, policy: Policy, new: list[Receipt], extra_exist
 
 def unavoidable_lost(ctx: OptionContext, policy: Policy) -> float:
     """Lost sales before ANY supplier could deliver (nothing a plan can fix)."""
-    arrivals = [a for o in ctx.offers if o.active for m in ("standard", "express")
+    arrivals = [a for o in ctx.offers if can_supply(o) for m in ("standard", "express")
                 if (a := earliest_arrival(ctx, o, m)) is not None]
+    arrivals += [t.lead_days for t in ctx.transfer_sources if t.surplus > 0]
     first = min(arrivals) if arrivals else 0
     base = _project(ctx, policy, [])
     return sum(d.lost for d in base.days if d.day < first)
@@ -113,7 +122,8 @@ def evaluate_with_projection(ctx: OptionContext, policy: Policy, plan: Plan, *, 
     """Project the plan, price it and run every rule check. Returns the option and its day-by-day projection."""
     checks: dict[str, bool] = {
         "supplier_known": True, "supplier_active": True, "express_available": True, "qty_positive": True,
-        "moq": True, "case_pack": True, "max_qty": True, "delivery_calendar": True,
+        "moq": True, "case_pack": True, "max_qty": True, "delivery_calendar": True, "supplier_availability": True,
+        "transfer_source": True,
     }
     notes: list[str] = []
     receipts: list[Receipt] = []
@@ -137,6 +147,10 @@ def evaluate_with_projection(ctx: OptionContext, policy: Policy, plan: Plan, *, 
             notes.append(f"line {i}: {line.qty} is not a multiple of case pack {offer.case_pack}")
         if line.qty > offer.max_qty:
             checks["max_qty"] = False
+        if offer.available_qty is not None and line.qty > offer.available_qty:
+            checks["supplier_availability"] = False
+            notes.append(f"line {i}: {offer.supplier_id} can only supply {offer.available_qty} more "
+                         f"({offer.availability_note or 'supplier said so'})")
         earliest = earliest_arrival(ctx, offer, line.mode)
         if earliest is None:
             checks["express_available"] = False
@@ -152,12 +166,24 @@ def evaluate_with_projection(ctx: OptionContext, policy: Policy, plan: Plan, *, 
         if line.mode == "express":
             premium += line.qty * offer.express_premium_per_unit
 
+    transfer_cost = 0.0
+    for j, t in enumerate(plan.transfers, start=1):
+        src = next((x for x in ctx.transfer_sources if x.node_id == t.from_node), None)
+        if src is None or t.qty <= 0 or t.qty > src.surplus:
+            checks["transfer_source"] = False
+            notes.append(f"transfer {j}: {t.from_node} can spare {src.surplus if src else 0} units, asked {t.qty}")
+            continue
+        receipts.append(Receipt(day=src.lead_days, qty=t.qty, remaining_shelf_life_days=src.remaining_shelf_life_days,
+                                source=f"plan:transfer{j}", is_new=True))
+        transfer_cost += t.qty * src.cost_per_unit
+
     check_from = min((r.day for r in receipts), default=earliest_arrival(ctx, reference_offer(ctx)))
     proj = _project(ctx, policy, receipts, check_from=check_from)
     base = _project(ctx, policy, [], check_from=check_from)
     total_qty = plan.total_qty
     purchase = round(sum(q * c for q, c in line_costs) + premium, 2)
-    waste_pct = round(100 * proj.expired_units_new / total_qty, 1) if total_qty else 0.0
+    moved = total_qty + plan.transfer_qty
+    waste_pct = round(100 * proj.expired_units_new / moved, 1) if moved else 0.0
     new_over = [d for d in proj.over_capacity_days if d < proj.horizon_days and d not in base.over_capacity_days]
     avoidable = max(0.0, proj.lost_units - unavoidable_lost(ctx, policy))
 
@@ -187,10 +213,11 @@ def evaluate_with_projection(ctx: OptionContext, policy: Policy, plan: Plan, *, 
         horizon_closes=[d.close for d in proj.days if d.day < proj.horizon_days],
         holding_pct_per_day=policy.costs.holding_cost_pct_per_day, avoidable_lost_units=avoidable,
         unit_margin=ctx.unit_margin, stockout_multiplier=policy.costs.stockout_cost_multiplier,
-        expired_units_new=proj.expired_units_new,
+        expired_units_new=proj.expired_units_new, transfer_cost=transfer_cost,
     )
     option = Option(
-        id=option_id, kind=kind, label=label, plan=plan, total_qty=total_qty, purchase_cost=purchase,
+        id=option_id, kind=kind, label=label, plan=plan, total_qty=total_qty, transfer_qty=plan.transfer_qty,
+        purchase_cost=purchase,
         express_premium=round(premium, 2), decision_cost=cost, cost_breakdown=breakdown,
         lost_units=proj.lost_units, expired_units=proj.expired_units_new, waste_pct=waste_pct,
         min_close=proj.min_close, end_close=proj.end_close, over_capacity_days=new_over,
@@ -212,7 +239,22 @@ def generate_options(ctx: OptionContext, policy: Policy) -> list[Option]:
                            Plan(lines=[PlanLine(supplier_id=ctx.recommendation_supplier, qty=ctx.recommendation_qty)])))
 
     if need > 0:
-        for offer in (o for o in ctx.offers if o.active):
+        for src in ctx.transfer_sources:
+            if src.surplus <= 0:
+                continue
+            qty = min(src.surplus, math.ceil(need))
+            if qty >= need:
+                candidates.append((f"transfer:{src.node_id}", "transfer",
+                                   f"Transfer {qty} from {src.node_id} (arrives day {src.lead_days})",
+                                   Plan(transfers=[TransferLine(from_node=src.node_id, qty=qty)])))
+            else:
+                for offer in (o for o in ctx.offers if can_supply(o)):
+                    rest = round_to_pack(need - qty, offer.moq, offer.case_pack)
+                    candidates.append((f"transfer_plus:{src.node_id}:{offer.supplier_id}", "transfer_plus",
+                                       f"Transfer {qty} from {src.node_id} + {rest} from {offer.supplier_id}",
+                                       Plan(lines=[PlanLine(supplier_id=offer.supplier_id, qty=rest)],
+                                            transfers=[TransferLine(from_node=src.node_id, qty=qty)])))
+        for offer in (o for o in ctx.offers if can_supply(o)):
             qty = round_to_pack(need, offer.moq, offer.case_pack)
             sid = offer.supplier_id
             std = Plan(lines=[PlanLine(supplier_id=sid, qty=qty)])
@@ -248,7 +290,8 @@ def generate_options(ctx: OptionContext, policy: Policy) -> list[Option]:
     seen: set[tuple] = set()
     options: list[Option] = []
     for oid, kind, label, plan in candidates:
-        key = tuple((ln.supplier_id, ln.qty, ln.mode, ln.delivery_day) for ln in plan.lines)
+        key = (tuple((ln.supplier_id, ln.qty, ln.mode, ln.delivery_day) for ln in plan.lines),
+               tuple((t.from_node, t.qty) for t in plan.transfers))
         if key in seen:
             continue
         if kind != "as_recommended":  # the recommendation is always shown, even if identical to an option

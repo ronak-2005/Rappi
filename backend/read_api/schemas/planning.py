@@ -5,9 +5,10 @@ from typing import Optional
 
 from pydantic import BaseModel
 
-from shared.domain.planning import Plan
+from shared.domain.planning import DemandAssumption, Plan
 
 
 class PlanQuery(BaseModel):
     plan: Plan
     recommendation_id: Optional[str] = None
+    demand: Optional[DemandAssumption] = None  # use this demand instead of the forecast

@@ -28,3 +28,9 @@ class ConflictError(DomainError):
 class InvalidRequestError(DomainError):
     code = "invalid_request"
     status = 422
+
+
+class ConfigurationError(DomainError):
+    """Something in .env / llm.env is missing or wrong; the message says what to change."""
+    code = "configuration_error"
+    status = 503

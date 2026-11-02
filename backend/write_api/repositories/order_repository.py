@@ -71,3 +71,20 @@ def set_recommendation_status(session: Session, rec_id: str, status: str) -> Non
         rec.status = status
         session.add(rec)
         session.commit()
+
+
+def transfer(session: Session, transfer_id: str) -> m.Transfer | None:
+    return session.get(m.Transfer, transfer_id)
+
+
+def create_transfer(session: Session, *, transfer_id: str, from_node: str, to_node: str, sku: str, qty: int,
+                    eta: date, run_id: str) -> m.Transfer:
+    """Book a transfer and take the stock out of the source store (it is picked now)."""
+    t = m.Transfer(id=transfer_id, from_node=from_node, to_node=to_node, sku_id=sku, qty=qty, eta=eta,
+                   status="in_transit", run_id=run_id)
+    inv = session.exec(select(m.Inventory).where(m.Inventory.node_id == from_node, m.Inventory.sku_id == sku)).first()
+    inv.on_hand -= qty
+    session.add(t)
+    session.add(inv)
+    session.commit()
+    return t

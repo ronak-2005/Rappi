@@ -4,6 +4,16 @@ An agent that reviews purchasing situations for a quick-commerce business (dark 
 
 > 🚧 Work in progress. See [CHECKPOINTS.md](CHECKPOINTS.md) for what works at each tagged push.
 
+## What it handles
+| Scenario | Trigger | What the agent works out |
+|---|---|---|
+| S1 Review a recommendation | the replenishment engine proposes a PO | accept / modify / reject / investigate: open POs, MOQ vs shelf life, phantom stock |
+| S2 Supplier can't fulfil | a supplier confirms only part of a PO | does it matter? transfer from another dark store, second supplier, or escalate |
+| S3 Demand changed | sales diverge from the forecast | real level change vs promotion vs one-off spike; plan on evidenced demand |
+| S4 Constraints | any of the above | storage on delivery day, budget, shelf life, express bridge, approvals, re-plan after partial delivery |
+
+18 scenario fixtures with hand-computed answers live in `backend/fixtures/`.
+
 ## Core idea in one paragraph
 Maths and rules are deterministic code. The LLM does the judgment: what to investigate, what the evidence means, which feasible option to choose, and how to explain it. The backend is split into a **Read API** (read-only database connection: the agent investigates through it and *cannot* change anything) and a **Write API** (the only service that changes state; every change passes the rulebook, the approval gate and duplicate-order protection, then gets verified).
 

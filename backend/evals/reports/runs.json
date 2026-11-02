@@ -102,7 +102,7 @@
     "decision": "investigate",
     "all_pass": true,
     "error": null,
-    "seconds": 0.2,
+    "seconds": 0.3,
     "tool_calls": 11,
     "revisions": 0,
     "replans": 0,
@@ -360,8 +360,8 @@
     "decision": "reject",
     "all_pass": true,
     "error": null,
-    "seconds": 0.3,
-    "tool_calls": 11,
+    "seconds": 0.2,
+    "tool_calls": 12,
     "revisions": 0,
     "replans": 0,
     "checks": [
@@ -418,6 +418,634 @@
         "group": "validation",
         "passed": true,
         "detail": "0 action(s), 0 unverified"
+      },
+      {
+        "name": "run_finished_cleanly",
+        "group": "recovery",
+        "passed": true,
+        "detail": "status=completed error=None"
+      }
+    ]
+  },
+  {
+    "brain": "baseline",
+    "fixture": "s2_alt_supplier",
+    "scenario": "S2",
+    "repeat": 0,
+    "status": "completed",
+    "decision": "modify",
+    "all_pass": true,
+    "error": null,
+    "seconds": 0.4,
+    "tool_calls": 13,
+    "revisions": 0,
+    "replans": 0,
+    "checks": [
+      {
+        "name": "decision_type",
+        "group": "decision",
+        "passed": true,
+        "detail": "got modify, expected one of ['modify']"
+      },
+      {
+        "name": "quantity",
+        "group": "decision",
+        "passed": true,
+        "detail": "got 620, expected [600, 640]"
+      },
+      {
+        "name": "transfers",
+        "group": "decision",
+        "passed": true,
+        "detail": "got 0 transfer(s), expected 0"
+      },
+      {
+        "name": "order_lines",
+        "group": "decision",
+        "passed": true,
+        "detail": "got 1 line(s), expected 1"
+      },
+      {
+        "name": "supplier",
+        "group": "decision",
+        "passed": true,
+        "detail": "got ['SUP_B'], expected SUP_B"
+      },
+      {
+        "name": "required_evidence",
+        "group": "evidence",
+        "passed": true,
+        "detail": "all required tools called"
+      },
+      {
+        "name": "evidence_gate_first_try",
+        "group": "evidence",
+        "passed": true,
+        "detail": "0 gate rejection(s)"
+      },
+      {
+        "name": "validated_before_acting",
+        "group": "constraints",
+        "passed": true,
+        "detail": "1 action(s), 0 unvalidated"
+      },
+      {
+        "name": "approval_gate",
+        "group": "constraints",
+        "passed": true,
+        "detail": "approval requested 0x, expected no"
+      },
+      {
+        "name": "purchase_orders",
+        "group": "action",
+        "passed": true,
+        "detail": "1 PO(s), expected 1"
+      },
+      {
+        "name": "no_duplicate_orders",
+        "group": "action",
+        "passed": true,
+        "detail": "1 PO(s) here, 1 at the supplier"
+      },
+      {
+        "name": "verified_after_acting",
+        "group": "validation",
+        "passed": true,
+        "detail": "1 action(s), 0 unverified"
+      },
+      {
+        "name": "final_verification",
+        "group": "validation",
+        "passed": true,
+        "detail": "got OK, expected ['OK']"
+      },
+      {
+        "name": "run_finished_cleanly",
+        "group": "recovery",
+        "passed": true,
+        "detail": "status=completed error=None"
+      }
+    ]
+  },
+  {
+    "brain": "baseline",
+    "fixture": "s2_alt_supplier_rejects_escalate",
+    "scenario": "S2",
+    "repeat": 0,
+    "status": "escalated",
+    "decision": "escalate",
+    "all_pass": true,
+    "error": null,
+    "seconds": 0.4,
+    "tool_calls": 15,
+    "revisions": 0,
+    "replans": 1,
+    "checks": [
+      {
+        "name": "decision_type",
+        "group": "decision",
+        "passed": true,
+        "detail": "got modify, expected one of ['modify']"
+      },
+      {
+        "name": "quantity",
+        "group": "decision",
+        "passed": true,
+        "detail": "got 620, expected [600, 640]"
+      },
+      {
+        "name": "order_lines",
+        "group": "decision",
+        "passed": true,
+        "detail": "got 1 line(s), expected 1"
+      },
+      {
+        "name": "supplier",
+        "group": "decision",
+        "passed": true,
+        "detail": "got ['SUP_B'], expected SUP_B"
+      },
+      {
+        "name": "required_evidence",
+        "group": "evidence",
+        "passed": true,
+        "detail": "all required tools called"
+      },
+      {
+        "name": "evidence_gate_first_try",
+        "group": "evidence",
+        "passed": true,
+        "detail": "0 gate rejection(s)"
+      },
+      {
+        "name": "validated_before_acting",
+        "group": "constraints",
+        "passed": true,
+        "detail": "1 action(s), 0 unvalidated"
+      },
+      {
+        "name": "approval_gate",
+        "group": "constraints",
+        "passed": true,
+        "detail": "approval requested 0x, expected no"
+      },
+      {
+        "name": "purchase_orders",
+        "group": "action",
+        "passed": true,
+        "detail": "1 PO(s), expected 1"
+      },
+      {
+        "name": "no_duplicate_orders",
+        "group": "action",
+        "passed": true,
+        "detail": "1 PO(s) here, 1 at the supplier"
+      },
+      {
+        "name": "supplier_side_orders",
+        "group": "action",
+        "passed": true,
+        "detail": "1, expected 1"
+      },
+      {
+        "name": "verified_after_acting",
+        "group": "validation",
+        "passed": true,
+        "detail": "1 action(s), 0 unverified"
+      },
+      {
+        "name": "final_verification",
+        "group": "validation",
+        "passed": true,
+        "detail": "got UNACCEPTABLE, expected ['UNACCEPTABLE']"
+      },
+      {
+        "name": "escalated",
+        "group": "recovery",
+        "passed": true,
+        "detail": "status=escalated"
+      },
+      {
+        "name": "run_finished_cleanly",
+        "group": "recovery",
+        "passed": true,
+        "detail": "status=escalated error=None"
+      }
+    ]
+  },
+  {
+    "brain": "baseline",
+    "fixture": "s2_partial_but_sufficient",
+    "scenario": "S2",
+    "repeat": 0,
+    "status": "completed",
+    "decision": "accept",
+    "all_pass": true,
+    "error": null,
+    "seconds": 0.4,
+    "tool_calls": 13,
+    "revisions": 0,
+    "replans": 0,
+    "checks": [
+      {
+        "name": "decision_type",
+        "group": "decision",
+        "passed": true,
+        "detail": "got accept, expected one of ['accept']"
+      },
+      {
+        "name": "quantity",
+        "group": "decision",
+        "passed": true,
+        "detail": "got 0, expected [0, 0]"
+      },
+      {
+        "name": "transfers",
+        "group": "decision",
+        "passed": true,
+        "detail": "got 0 transfer(s), expected 0"
+      },
+      {
+        "name": "required_evidence",
+        "group": "evidence",
+        "passed": true,
+        "detail": "all required tools called"
+      },
+      {
+        "name": "evidence_gate_first_try",
+        "group": "evidence",
+        "passed": true,
+        "detail": "0 gate rejection(s)"
+      },
+      {
+        "name": "validated_before_acting",
+        "group": "constraints",
+        "passed": true,
+        "detail": "0 action(s), 0 unvalidated"
+      },
+      {
+        "name": "approval_gate",
+        "group": "constraints",
+        "passed": true,
+        "detail": "approval requested 0x, expected no"
+      },
+      {
+        "name": "purchase_orders",
+        "group": "action",
+        "passed": true,
+        "detail": "0 PO(s), expected 0"
+      },
+      {
+        "name": "no_duplicate_orders",
+        "group": "action",
+        "passed": true,
+        "detail": "0 PO(s) here, 0 at the supplier"
+      },
+      {
+        "name": "verified_after_acting",
+        "group": "validation",
+        "passed": true,
+        "detail": "0 action(s), 0 unverified"
+      },
+      {
+        "name": "run_finished_cleanly",
+        "group": "recovery",
+        "passed": true,
+        "detail": "status=completed error=None"
+      }
+    ]
+  },
+  {
+    "brain": "baseline",
+    "fixture": "s2_transfer_from_node",
+    "scenario": "S2",
+    "repeat": 0,
+    "status": "completed",
+    "decision": "modify",
+    "all_pass": true,
+    "error": null,
+    "seconds": 0.4,
+    "tool_calls": 13,
+    "revisions": 0,
+    "replans": 0,
+    "checks": [
+      {
+        "name": "decision_type",
+        "group": "decision",
+        "passed": true,
+        "detail": "got modify, expected one of ['modify']"
+      },
+      {
+        "name": "quantity",
+        "group": "decision",
+        "passed": true,
+        "detail": "got 0, expected [0, 0]"
+      },
+      {
+        "name": "transfers",
+        "group": "decision",
+        "passed": true,
+        "detail": "got 1 transfer(s), expected 1"
+      },
+      {
+        "name": "transfer_quantity",
+        "group": "decision",
+        "passed": true,
+        "detail": "got 607, expected [600, 640]"
+      },
+      {
+        "name": "required_evidence",
+        "group": "evidence",
+        "passed": true,
+        "detail": "all required tools called"
+      },
+      {
+        "name": "evidence_gate_first_try",
+        "group": "evidence",
+        "passed": true,
+        "detail": "0 gate rejection(s)"
+      },
+      {
+        "name": "validated_before_acting",
+        "group": "constraints",
+        "passed": true,
+        "detail": "1 action(s), 0 unvalidated"
+      },
+      {
+        "name": "approval_gate",
+        "group": "constraints",
+        "passed": true,
+        "detail": "approval requested 0x, expected no"
+      },
+      {
+        "name": "purchase_orders",
+        "group": "action",
+        "passed": true,
+        "detail": "0 PO(s), expected 0"
+      },
+      {
+        "name": "no_duplicate_orders",
+        "group": "action",
+        "passed": true,
+        "detail": "0 PO(s) here, 0 at the supplier"
+      },
+      {
+        "name": "verified_after_acting",
+        "group": "validation",
+        "passed": true,
+        "detail": "1 action(s), 0 unverified"
+      },
+      {
+        "name": "run_finished_cleanly",
+        "group": "recovery",
+        "passed": true,
+        "detail": "status=completed error=None"
+      }
+    ]
+  },
+  {
+    "brain": "baseline",
+    "fixture": "s3_one_day_noise",
+    "scenario": "S3",
+    "repeat": 0,
+    "status": "completed",
+    "decision": "accept",
+    "all_pass": true,
+    "error": null,
+    "seconds": 0.3,
+    "tool_calls": 14,
+    "revisions": 0,
+    "replans": 0,
+    "checks": [
+      {
+        "name": "decision_type",
+        "group": "decision",
+        "passed": true,
+        "detail": "got accept, expected one of ['accept']"
+      },
+      {
+        "name": "quantity",
+        "group": "decision",
+        "passed": true,
+        "detail": "got 0, expected [0, 0]"
+      },
+      {
+        "name": "required_evidence",
+        "group": "evidence",
+        "passed": true,
+        "detail": "all required tools called"
+      },
+      {
+        "name": "evidence_gate_first_try",
+        "group": "evidence",
+        "passed": true,
+        "detail": "0 gate rejection(s)"
+      },
+      {
+        "name": "validated_before_acting",
+        "group": "constraints",
+        "passed": true,
+        "detail": "0 action(s), 0 unvalidated"
+      },
+      {
+        "name": "approval_gate",
+        "group": "constraints",
+        "passed": true,
+        "detail": "approval requested 0x, expected no"
+      },
+      {
+        "name": "purchase_orders",
+        "group": "action",
+        "passed": true,
+        "detail": "0 PO(s), expected 0"
+      },
+      {
+        "name": "no_duplicate_orders",
+        "group": "action",
+        "passed": true,
+        "detail": "0 PO(s) here, 0 at the supplier"
+      },
+      {
+        "name": "verified_after_acting",
+        "group": "validation",
+        "passed": true,
+        "detail": "0 action(s), 0 unverified"
+      },
+      {
+        "name": "run_finished_cleanly",
+        "group": "recovery",
+        "passed": true,
+        "detail": "status=completed error=None"
+      }
+    ]
+  },
+  {
+    "brain": "baseline",
+    "fixture": "s3_promo_spike_temporary",
+    "scenario": "S3",
+    "repeat": 0,
+    "status": "completed",
+    "decision": "accept",
+    "all_pass": true,
+    "error": null,
+    "seconds": 0.3,
+    "tool_calls": 14,
+    "revisions": 0,
+    "replans": 0,
+    "checks": [
+      {
+        "name": "decision_type",
+        "group": "decision",
+        "passed": true,
+        "detail": "got accept, expected one of ['accept']"
+      },
+      {
+        "name": "quantity",
+        "group": "decision",
+        "passed": true,
+        "detail": "got 0, expected [0, 0]"
+      },
+      {
+        "name": "required_evidence",
+        "group": "evidence",
+        "passed": true,
+        "detail": "all required tools called"
+      },
+      {
+        "name": "evidence_gate_first_try",
+        "group": "evidence",
+        "passed": true,
+        "detail": "0 gate rejection(s)"
+      },
+      {
+        "name": "validated_before_acting",
+        "group": "constraints",
+        "passed": true,
+        "detail": "0 action(s), 0 unvalidated"
+      },
+      {
+        "name": "approval_gate",
+        "group": "constraints",
+        "passed": true,
+        "detail": "approval requested 0x, expected no"
+      },
+      {
+        "name": "purchase_orders",
+        "group": "action",
+        "passed": true,
+        "detail": "0 PO(s), expected 0"
+      },
+      {
+        "name": "no_duplicate_orders",
+        "group": "action",
+        "passed": true,
+        "detail": "0 PO(s) here, 0 at the supplier"
+      },
+      {
+        "name": "verified_after_acting",
+        "group": "validation",
+        "passed": true,
+        "detail": "0 action(s), 0 unverified"
+      },
+      {
+        "name": "run_finished_cleanly",
+        "group": "recovery",
+        "passed": true,
+        "detail": "status=completed error=None"
+      }
+    ]
+  },
+  {
+    "brain": "baseline",
+    "fixture": "s3_sustained_spike",
+    "scenario": "S3",
+    "repeat": 0,
+    "status": "completed",
+    "decision": "modify",
+    "all_pass": true,
+    "error": null,
+    "seconds": 0.3,
+    "tool_calls": 14,
+    "revisions": 0,
+    "replans": 0,
+    "checks": [
+      {
+        "name": "decision_type",
+        "group": "decision",
+        "passed": true,
+        "detail": "got modify, expected one of ['modify']"
+      },
+      {
+        "name": "quantity",
+        "group": "decision",
+        "passed": true,
+        "detail": "got 1160, expected [1100, 1240]"
+      },
+      {
+        "name": "demand_assumption",
+        "group": "decision",
+        "passed": true,
+        "detail": "planned on 180.0/day, expected [165.0, 195.0]"
+      },
+      {
+        "name": "order_lines",
+        "group": "decision",
+        "passed": true,
+        "detail": "got 1 line(s), expected 1"
+      },
+      {
+        "name": "supplier",
+        "group": "decision",
+        "passed": true,
+        "detail": "got ['SUP_A'], expected SUP_A"
+      },
+      {
+        "name": "required_evidence",
+        "group": "evidence",
+        "passed": true,
+        "detail": "all required tools called"
+      },
+      {
+        "name": "evidence_gate_first_try",
+        "group": "evidence",
+        "passed": true,
+        "detail": "0 gate rejection(s)"
+      },
+      {
+        "name": "validated_before_acting",
+        "group": "constraints",
+        "passed": true,
+        "detail": "1 action(s), 0 unvalidated"
+      },
+      {
+        "name": "approval_gate",
+        "group": "constraints",
+        "passed": true,
+        "detail": "approval requested 0x, expected no"
+      },
+      {
+        "name": "purchase_orders",
+        "group": "action",
+        "passed": true,
+        "detail": "1 PO(s), expected 1"
+      },
+      {
+        "name": "no_duplicate_orders",
+        "group": "action",
+        "passed": true,
+        "detail": "1 PO(s) here, 1 at the supplier"
+      },
+      {
+        "name": "verified_after_acting",
+        "group": "validation",
+        "passed": true,
+        "detail": "1 action(s), 0 unverified"
+      },
+      {
+        "name": "final_verification",
+        "group": "validation",
+        "passed": true,
+        "detail": "got OK, expected ['OK']"
       },
       {
         "name": "run_finished_cleanly",
@@ -730,7 +1358,7 @@
     "decision": "escalate",
     "all_pass": true,
     "error": null,
-    "seconds": 0.2,
+    "seconds": 0.3,
     "tool_calls": 11,
     "revisions": 0,
     "replans": 0,
@@ -900,7 +1528,7 @@
     "decision": "accept",
     "all_pass": true,
     "error": null,
-    "seconds": 0.2,
+    "seconds": 0.3,
     "tool_calls": 12,
     "revisions": 0,
     "replans": 0,

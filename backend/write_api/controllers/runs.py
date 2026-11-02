@@ -24,20 +24,18 @@ def deps_for(request: Request, llm_env=None, llm_mode=None):
 @router.post("/runs")
 def start_run(body: StartRun, request: Request, background: BackgroundTasks):
     st = request.app.state
-    rec_id = body.recommendation_id
     if body.fixture_id:
         fx = fixture_service.load_world(body.fixture_id, st.db_file, st.supplier_client)
-        rec_id = rec_id or (fx.trigger.recommendation.id if fx.trigger.recommendation else None)
-    if rec_id is None:
-        world = st.read_client.get("/world")
-        fx = load_fixture_file(world["fixture_id"])
-        rec_id = fx.trigger.recommendation.id if fx.trigger.recommendation else None
-    if rec_id is None:
-        raise InvalidRequestError("no recommendation to review", "write_api.controllers.runs")
+    else:
+        fx = load_fixture_file(st.read_client.get("/world")["fixture_id"])
+    trigger_type, ref = ("recommendation", body.recommendation_id) if body.recommendation_id \
+        else (fx.trigger.type, fx.trigger.ref)
+    if ref is None:
+        raise InvalidRequestError("nothing to run: no trigger", "write_api.controllers.runs")
     deps = deps_for(request, body.llm_env, body.llm_mode)
-    run_id = run_service.start(deps, rec_id)
+    run_id = run_service.start(deps, ref, trigger_type)
     background.add_task(run_service.run, deps, run_id)
-    return {"run_id": run_id, "recommendation_id": rec_id, "llm_mode": deps.llm_mode,
+    return {"run_id": run_id, "trigger_type": trigger_type, "trigger_ref": ref, "llm_mode": deps.llm_mode,
             "llm_model": getattr(deps.llm, "model", ""), "stream": f"/runs/{run_id}/stream (read_api)"}
 
 

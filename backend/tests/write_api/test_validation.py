@@ -65,3 +65,29 @@ def test_duplicate_po_is_hard(world, db_file):
         s.commit()
     r = run(db_file, [PlanLine(supplier_id="SUP_A", qty=500)], rec="REC-102")
     assert "no_duplicate_po" in names(r.hard_failures)
+
+
+def test_forecast_override_needs_evidence(world, db_file):
+    from shared.domain.planning import DemandAssumption
+    world("s3_sustained_spike")
+    with read_write(db_file) as s:
+        ok = validate(s, POLICY, "CHAP", "MILK1L", [PlanLine(supplier_id="SUP_A", qty=1160)], None, [],
+                      DemandAssumption(per_day=180))
+        inflated = validate(s, POLICY, "CHAP", "MILK1L", [PlanLine(supplier_id="SUP_A", qty=1660)], None, [],
+                            DemandAssumption(per_day=230))
+    assert ok.passed and not ok.requires_approval
+    assert "forecast_override" in names(inflated.soft_violations)  # 230/day > 180 × 1.1 → a human must agree
+
+
+def test_transfer_beyond_surplus_is_hard(world, db_file):
+    from shared.domain.planning import TransferLine
+    world("s2_transfer_from_node")
+    with read_write(db_file) as s:
+        r = validate(s, POLICY, "CHAP", "MILK1L", [], None, [TransferLine(from_node="USAQ", qty=1500)])
+    assert "transfer_source" in names(r.hard_failures)  # Usaquén can spare 1069, not 1500
+
+
+def test_unavailable_supplier_is_hard(world, db_file):
+    world("s2_alt_supplier")
+    r = run(db_file, [PlanLine(supplier_id="SUP_A", qty=620)], rec=None)
+    assert "supplier_availability" in names(r.hard_failures)

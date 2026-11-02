@@ -25,7 +25,7 @@ from shared.config.policy import Policy
 from shared.db import models as m
 from shared.db.session import read_write
 from shared.domain.decision import Decision, ValidationReport
-from shared.domain.planning import Option, PlanLine
+from shared.domain.planning import Option, PlanLine, TransferLine
 from shared.observability.logging import run_id_var
 from write_api.actions import approvals, gateway
 from write_api.agent import evidence_gate
@@ -87,22 +87,40 @@ class Orchestrator:
         self.tool_schemas = [t.schema() for t in ALL_TOOLS]
 
     # ------------------------------------------------------------------ public
-    def start(self, recommendation_id: str) -> str:
-        """Create a run for a recommendation review. Returns the run id (call run() to execute)."""
-        situation = self.d.read.get(f"/situation/recommendations/{recommendation_id}")
+    def start(self, trigger_ref: str, trigger_type: str = "recommendation") -> str:
+        """Create a run for a trigger: a recommendation to review (S1/S4), a supplier event (S2) or a demand
+        alert (S3). Returns the run id (call run() to execute)."""
         world = self.d.read.get("/world")
-        rec = situation["recommendation"]
+        if trigger_type == "recommendation":
+            situation = self.d.read.get(f"/situation/recommendations/{trigger_ref}")
+            rec = situation["recommendation"]
+            node, sku, rec_id = rec["node"], rec["sku"], rec["id"]
+            user = prompt("recommendation_review", qty=rec["qty"], sku=sku, node=node,
+                          supplier_text=f" from supplier **{rec['supplier']}**" if rec.get("supplier") else "",
+                          recommendation_id=rec_id, today=world["today"])
+        elif trigger_type == "supplier_event":
+            situation = self.d.read.get(f"/situation/supplier-events/{trigger_ref}")
+            ev, po = situation["event"], situation["purchase_order"]
+            node, sku, rec_id = ev["node"], ev["sku"], None
+            user = prompt("supplier_shortfall", supplier=ev["supplier"], po_id=po["id"], qty_ordered=po["qty_ordered"],
+                          qty_confirmed=po["qty_confirmed"], sku=sku, node=node, message=ev["message"],
+                          today=world["today"])
+        elif trigger_type == "demand_alert":
+            situation = self.d.read.get(f"/situation/demand-alerts/{trigger_ref}")
+            al = situation["alert"]
+            node, sku, rec_id = al["node"], al["sku"], None
+            user = prompt("demand_change", sku=sku, node=node, message=al["message"], today=world["today"])
+        else:
+            raise ValueError(f"unknown trigger type {trigger_type}")
         run_id = f"RUN-{datetime.now(timezone.utc):%Y%m%d%H%M%S}-{uuid.uuid4().hex[:4]}"
-        user = prompt("recommendation_review", qty=rec["qty"], sku=rec["sku"], node=rec["node"],
-                      supplier_text=f" from supplier **{rec['supplier']}**" if rec.get("supplier") else "",
-                      recommendation_id=rec["id"], today=world["today"])
         memory = {"messages": [{"role": "system", "content": prompt("system")}, {"role": "user", "content": user}],
                   "called": {}, "format_retries": 0, "pending": None, "executions": [], "verifications": [],
-                  "decisions": [], "node": rec["node"], "sku": rec["sku"], "recommendation_id": rec["id"],
-                  "llm_env": self.d.llm_env}
+                  "decisions": [], "node": node, "sku": sku, "recommendation_id": rec_id,
+                  "trigger_type": trigger_type, "llm_env": self.d.llm_env,
+                  "recommendation": situation.get("recommendation")}
         with read_write(self.d.db_file) as s:
-            runs.create_run(s, id=run_id, fixture_id=world["fixture_id"], trigger_type="recommendation",
-                            trigger_ref=rec["id"], status="running", state="INTAKE", llm_mode=self.d.llm_mode,
+            runs.create_run(s, id=run_id, fixture_id=world["fixture_id"], trigger_type=trigger_type,
+                            trigger_ref=trigger_ref, status="running", state="INTAKE", llm_mode=self.d.llm_mode,
                             llm_model=getattr(self.d.llm, "model", ""), memory=memory)
             runs.add_step(s, run_id, "INTAKE", "info", "situation", situation)
         return run_id
@@ -177,7 +195,9 @@ class Orchestrator:
             return
         tctx = registry.ToolContext(read=self.d.read, db_file=self.d.db_file, policy=self.d.policy,
                                     node=c.run.memory["node"], sku=c.run.memory["sku"],
-                                    recommendation_id=c.run.memory["recommendation_id"])
+                                    recommendation_id=c.run.memory["recommendation_id"],
+                                    trigger_type=c.run.memory.get("trigger_type", "recommendation"),
+                                    trigger_ref=c.run.trigger_ref)
         out = registry.run(tool, tc.arguments, tctx)
         if out.ok:
             c.called[tc.id] = tc.name
@@ -220,10 +240,14 @@ class Orchestrator:
             return "continue"
 
         decision = Decision.model_validate(parsed.model_dump())
+        rec = mem.get("recommendation")
+        if decision.type == "accept" and not decision.lines and not decision.transfers and rec:
+            # "accept the recommendation" = place exactly what was recommended
+            decision.lines = [PlanLine(supplier_id=rec["supplier"], qty=rec["qty"])]
         c.decisions.append(decision.model_dump())
         self._step(c, "decision", decision.type, decision.model_dump())
 
-        gate = evidence_gate.check(decision, c.called)
+        gate = evidence_gate.check(decision, c.called, mem.get("trigger_type", "recommendation"))
         self._step(c, "gate", "evidence", gate or {"passed": True})
         if gate:
             c.run.revisions += 1
@@ -238,7 +262,7 @@ class Orchestrator:
 
         self._set(c, state="VALIDATE")
         report = validate(c.session, self.d.policy, decision.node, decision.sku, decision.lines,
-                          decision.recommendation_id)
+                          decision.recommendation_id, decision.transfers, decision.demand_assumption)
         self._step(c, "validation", "rulebook", _report_payload(report))
         if not report.passed:
             c.run.revisions += 1
@@ -256,13 +280,15 @@ class Orchestrator:
                                         "soft_violations": [r.model_dump() for r in report.soft_violations]})
             return self._request_approval(c, decision, report)
 
-        self._tool_reply(c, tc.id, {"status": "validated; executing" if decision.lines else "validated; no order needed"})
-        return self._act(c, decision, decision.lines, report.evaluation)
+        acting = bool(decision.lines or decision.transfers)
+        self._tool_reply(c, tc.id, {"status": "validated; executing" if acting else "validated; no action needed"})
+        return self._act(c, decision, decision.lines, report.evaluation, decision.transfers)
 
     def _request_approval(self, c: _Ctx, decision: Decision, report: ValidationReport) -> str:
         reasons = [f"{r.rule}: {r.message}" for r in report.soft_violations]
         a = approvals.request(c.session, c.run.id, reasons, {
             "decision": decision.model_dump(), "lines": [ln.model_dump() for ln in decision.lines],
+            "transfers": [t.model_dump() for t in decision.transfers],
             "evaluation": report.evaluation.model_dump() if report.evaluation else None})
         c.pending = {"approval_id": a.id}
         self._step(c, "approval", "requested", {"approval_id": a.id, "reasons": reasons})
@@ -287,24 +313,28 @@ class Orchestrator:
             self._set(c, status="running", state="INVESTIGATE")
             return "continue"
         lines = [PlanLine.model_validate(x) for x in a.plan["lines"]]
+        transfers = [TransferLine.model_validate(x) for x in a.plan.get("transfers", [])]
         expected = Option.model_validate(a.plan["evaluation"]) if a.plan.get("evaluation") else None
         if a.status == "edited":  # a human changed the plan: hard rules still apply
-            report = validate(c.session, self.d.policy, decision.node, decision.sku, lines, decision.recommendation_id)
+            report = validate(c.session, self.d.policy, decision.node, decision.sku, lines, decision.recommendation_id,
+                              transfers, decision.demand_assumption)
             self._step(c, "validation", "rulebook_after_edit", _report_payload(report))
             if not report.passed:
                 return self._escalate(c, "the human-edited plan breaks hard rules")
             expected = report.evaluation
         self._set(c, status="running")
-        return self._act(c, decision, lines, expected)
+        return self._act(c, decision, lines, expected, transfers)
 
     # ------------------------------------------------------------------ act + verify
-    def _act(self, c: _Ctx, decision: Decision, lines: list[PlanLine], expected: Optional[Option]) -> str:
-        if not lines:  # validated reject: nothing to execute
+    def _act(self, c: _Ctx, decision: Decision, lines: list[PlanLine], expected: Optional[Option],
+             transfers: Optional[list[TransferLine]] = None) -> str:
+        transfers = transfers or []
+        if not lines and not transfers:  # validated reject / keep the current plan: nothing to execute
             return self._finish(c, "completed", "COMPLETED", decision=decision.model_dump())
         self._set(c, state="EXECUTE")
         result = gateway.execute(c.session, self.d.supplier, run_id=c.run.id, attempt_tag=f"plan-{c.run.replans}",
                                  node=decision.node, sku=decision.sku, lines=lines,
-                                 recommendation_id=decision.recommendation_id)
+                                 recommendation_id=decision.recommendation_id, transfers=transfers)
         c.executions.append(result.model_dump())
         self._step(c, "action", "purchase_orders", result.model_dump())
         stats = learning.record(c.session, result)
@@ -313,7 +343,8 @@ class Orchestrator:
 
         self._set(c, state="VERIFY")
         report = verifier.verify(c.session, self.d.policy, node=decision.node, sku=decision.sku, expected=expected,
-                                 execution=result, recommendation_id=decision.recommendation_id)
+                                 execution=result, recommendation_id=decision.recommendation_id,
+                                 demand=decision.demand_assumption)
         c.verifications.append(report.model_dump())
         self._step(c, "verification", report.status, report.model_dump())
         if report.status in ("OK", "DEGRADED_OK"):

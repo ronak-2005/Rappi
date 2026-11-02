@@ -1,4 +1,4 @@
-"""Every S1/S4 fixture end-to-end with the deterministic baseline brain: same orchestrator, tools,
+"""Every fixture (S1-S4) end-to-end with the deterministic baseline brain: same orchestrator, tools,
 evidence gate, rulebook, gateway, mock supplier and verifier as a live LLM run. No API key."""
 
 import pytest
@@ -7,7 +7,7 @@ from evals.graders import grade
 from evals.harness import run_fixture
 from shared.domain.fixtures import list_fixture_files
 
-FIXTURES = [f.id for f in list_fixture_files() if f.scenario in ("S1", "S4")]
+FIXTURES = [f.id for f in list_fixture_files()]
 
 
 @pytest.mark.parametrize("fixture_id", FIXTURES)

@@ -5,7 +5,12 @@ export interface FixtureSummary {
   scenario: 'S1' | 'S2' | 'S3' | 'S4'
   title: string
   description: string
-  trigger: { type: string; recommendation?: { id: string; node: string; sku: string; qty: number; supplier?: string } }
+  trigger: {
+    type: 'recommendation' | 'supplier_event' | 'demand_alert'
+    recommendation?: { id: string; node: string; sku: string; qty: number; supplier?: string }
+    supplier_event?: { id: string; po_id: string; confirmed_qty: number; message: string }
+    demand_alert?: { id: string; node: string; sku: string; message: string }
+  }
   expected: { decision: string[]; qty_range?: [number, number] | null; notes: string; key_factors: string[] }
 }
 
@@ -16,6 +21,9 @@ export interface PlanLine {
   delivery_day?: number | null
 }
 
+export interface TransferLine { from_node: string; qty: number }
+export interface DemandAssumption { per_day: number; until_day?: number | null; reason?: string }
+
 export interface DecisionReason { factor: string; finding: string; evidence: string[] }
 
 export interface Decision {
@@ -24,6 +32,8 @@ export interface Decision {
   sku?: string
   recommendation_id?: string
   lines?: PlanLine[]
+  transfers?: TransferLine[]
+  demand_assumption?: DemandAssumption | null
   reasons?: DecisionReason[]
   risks?: string[]
   confidence?: string
@@ -87,7 +97,9 @@ export interface RunDetail {
   error: string | null
   finished: boolean
   purchase_orders: PurchaseOrder[]
+  transfers: { id: string; from_node: string; to_node: string; qty: number; eta: string; status: string }[]
   approvals: Approval[]
+  trigger_type: string
   context: { node: string; sku: string; recommendation_id: string }
 }
 

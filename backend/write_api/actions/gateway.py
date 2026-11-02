@@ -17,9 +17,10 @@ from sqlmodel import Session
 from shared.db import models as m
 from shared.db import snapshot
 from shared.domain.decision import ExecutionLine, ExecutionResult
-from shared.domain.planning import PlanLine
+from shared.domain.planning import PlanLine, TransferLine
 from shared.engine.options import earliest_arrival
 from write_api.clients.supplier_client import SupplierClient
+from write_api.repositories import availability_repository
 from write_api.repositories import order_repository as orders
 
 log = logging.getLogger("write_api.actions.gateway")
@@ -31,10 +32,23 @@ def idempotency_key(run_id: str, attempt_tag: str, index: int, line: PlanLine, d
 
 
 def execute(session: Session, supplier: SupplierClient, *, run_id: str, attempt_tag: str, node: str, sku: str,
-            lines: list[PlanLine], recommendation_id: str | None = None) -> ExecutionResult:
+            lines: list[PlanLine], recommendation_id: str | None = None,
+            transfers: list[TransferLine] | None = None) -> ExecutionResult:
     ctx = snapshot.build_context(session, node, sku, recommendation_id)
     sku_row = session.get(m.Sku, sku)
     results: list[ExecutionLine] = []
+    for j, t in enumerate(transfers or []):  # internal moves: no supplier involved
+        src = next(x for x in ctx.transfer_sources if x.node_id == t.from_node)
+        eta = ctx.today + timedelta(days=src.lead_days)
+        tid = "TR-" + hashlib.sha256(f"{run_id}|{attempt_tag}|t{j}|{t.from_node}|{t.qty}".encode()).hexdigest()[:10]
+        existing = orders.transfer(session, tid)
+        if existing is None:
+            orders.create_transfer(session, transfer_id=tid, from_node=t.from_node, to_node=node, sku=sku, qty=t.qty,
+                                   eta=eta, run_id=run_id)
+        results.append(ExecutionLine(po_id=tid, supplier_id=f"transfer:{t.from_node}", qty_requested=t.qty,
+                                     qty_confirmed=t.qty, status="confirmed", requested_delivery=eta.isoformat(),
+                                     confirmed_delivery=eta.isoformat(), unit_cost=src.cost_per_unit,
+                                     message=f"transfer from {t.from_node}", replayed=existing is not None))
     for i, line in enumerate(lines):
         offer = next(o for o in ctx.offers if o.supplier_id == line.supplier_id)
         day = line.delivery_day if line.delivery_day is not None else earliest_arrival(ctx, offer, line.mode)
@@ -75,6 +89,9 @@ def execute(session: Session, supplier: SupplierClient, *, run_id: str, attempt_
                               expected_delivery=_date(d["delivery_date"]), unit_cost=d["unit_cost"],
                               notes=d.get("message", ""))
         orders.add_event(session, po.id, d["status"], d)
+        if d["qty_confirmed"] < line.qty:  # remember: this supplier can't supply more right now
+            availability_repository.record_unavailable(session, line.supplier_id, sku, ctx.today, 14,
+                                                       d.get("message", ""))
         if d["qty_confirmed"] > 0:
             orders.commit_budget(session, node, sku_row.category, ctx.today, d["qty_confirmed"] * d["unit_cost"])
         results.append(_line_from_po(po, line.qty, delivery.isoformat(), replayed=reply.replayed, attempts=reply.attempts))

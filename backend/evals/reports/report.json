@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-11-02T20:40:23+00:00",
+  "generated_at": "2026-11-02T21:00:08+00:00",
   "repeats": 3,
   "brains": [
     "baseline"
   ],
   "overall": {
     "baseline": {
-      "runs": 11,
+      "runs": 18,
       "all_checks_pass_rate": 1.0,
       "crashed": 0
     }
@@ -49,7 +49,7 @@
           ],
           "failed_checks": [],
           "avg_tool_calls": 11.0,
-          "avg_seconds": 0.2
+          "avg_seconds": 0.3
         }
       }
     },
@@ -108,7 +108,147 @@
             "reject"
           ],
           "failed_checks": [],
-          "avg_tool_calls": 11.0,
+          "avg_tool_calls": 12.0,
+          "avg_seconds": 0.2
+        }
+      }
+    },
+    {
+      "id": "s2_alt_supplier",
+      "scenario": "S2",
+      "title": "Shortfall: no spare stock nearby, second supplier covers it",
+      "expected": [
+        "modify"
+      ],
+      "by_brain": {
+        "baseline": {
+          "runs": 1,
+          "all_checks_pass_rate": 1.0,
+          "decisions": [
+            "modify"
+          ],
+          "failed_checks": [],
+          "avg_tool_calls": 13.0,
+          "avg_seconds": 0.4
+        }
+      }
+    },
+    {
+      "id": "s2_alt_supplier_rejects_escalate",
+      "scenario": "S2",
+      "title": "Shortfall, and the second supplier refuses too",
+      "expected": [
+        "modify"
+      ],
+      "by_brain": {
+        "baseline": {
+          "runs": 1,
+          "all_checks_pass_rate": 1.0,
+          "decisions": [
+            "escalate"
+          ],
+          "failed_checks": [],
+          "avg_tool_calls": 15.0,
+          "avg_seconds": 0.4
+        }
+      }
+    },
+    {
+      "id": "s2_partial_but_sufficient",
+      "scenario": "S2",
+      "title": "Supplier ships half, but stock already covers the cycle",
+      "expected": [
+        "accept"
+      ],
+      "by_brain": {
+        "baseline": {
+          "runs": 1,
+          "all_checks_pass_rate": 1.0,
+          "decisions": [
+            "accept"
+          ],
+          "failed_checks": [],
+          "avg_tool_calls": 13.0,
+          "avg_seconds": 0.4
+        }
+      }
+    },
+    {
+      "id": "s2_transfer_from_node",
+      "scenario": "S2",
+      "title": "Shortfall: a nearby store can spare the stock",
+      "expected": [
+        "modify"
+      ],
+      "by_brain": {
+        "baseline": {
+          "runs": 1,
+          "all_checks_pass_rate": 1.0,
+          "decisions": [
+            "modify"
+          ],
+          "failed_checks": [],
+          "avg_tool_calls": 13.0,
+          "avg_seconds": 0.4
+        }
+      }
+    },
+    {
+      "id": "s3_one_day_noise",
+      "scenario": "S3",
+      "title": "One huge day (a bulk order), otherwise normal",
+      "expected": [
+        "accept"
+      ],
+      "by_brain": {
+        "baseline": {
+          "runs": 1,
+          "all_checks_pass_rate": 1.0,
+          "decisions": [
+            "accept"
+          ],
+          "failed_checks": [],
+          "avg_tool_calls": 14.0,
+          "avg_seconds": 0.3
+        }
+      }
+    },
+    {
+      "id": "s3_promo_spike_temporary",
+      "scenario": "S3",
+      "title": "Sales up 60%, but it's a promotion that ends today",
+      "expected": [
+        "accept"
+      ],
+      "by_brain": {
+        "baseline": {
+          "runs": 1,
+          "all_checks_pass_rate": 1.0,
+          "decisions": [
+            "accept"
+          ],
+          "failed_checks": [],
+          "avg_tool_calls": 14.0,
+          "avg_seconds": 0.3
+        }
+      }
+    },
+    {
+      "id": "s3_sustained_spike",
+      "scenario": "S3",
+      "title": "Sales jumped 80% for a whole week, no promotion",
+      "expected": [
+        "modify"
+      ],
+      "by_brain": {
+        "baseline": {
+          "runs": 1,
+          "all_checks_pass_rate": 1.0,
+          "decisions": [
+            "modify"
+          ],
+          "failed_checks": [],
+          "avg_tool_calls": 14.0,
           "avg_seconds": 0.3
         }
       }
@@ -191,7 +331,7 @@
           ],
           "failed_checks": [],
           "avg_tool_calls": 11.0,
-          "avg_seconds": 0.2
+          "avg_seconds": 0.3
         }
       }
     },
@@ -231,7 +371,7 @@
           ],
           "failed_checks": [],
           "avg_tool_calls": 12.0,
-          "avg_seconds": 0.2
+          "avg_seconds": 0.3
         }
       }
     }
@@ -260,6 +400,27 @@
     },
     {
       "name": "supplier",
+      "group": "decision",
+      "by_brain": {
+        "baseline": 1.0
+      }
+    },
+    {
+      "name": "transfers",
+      "group": "decision",
+      "by_brain": {
+        "baseline": 1.0
+      }
+    },
+    {
+      "name": "transfer_quantity",
+      "group": "decision",
+      "by_brain": {
+        "baseline": 1.0
+      }
+    },
+    {
+      "name": "demand_assumption",
       "group": "decision",
       "by_brain": {
         "baseline": 1.0
@@ -336,6 +497,13 @@
       }
     },
     {
+      "name": "escalated",
+      "group": "recovery",
+      "by_brain": {
+        "baseline": 1.0
+      }
+    },
+    {
       "name": "recovered_by_replanning",
       "group": "recovery",
       "by_brain": {
@@ -344,13 +512,6 @@
     },
     {
       "name": "replan_quantity",
-      "group": "recovery",
-      "by_brain": {
-        "baseline": 1.0
-      }
-    },
-    {
-      "name": "escalated",
       "group": "recovery",
       "by_brain": {
         "baseline": 1.0

@@ -35,6 +35,29 @@ class SupplierOffer(BaseModel):
     fill_rate: float = 1.0
     on_time_rate: float = 1.0
     lead_time_sigma_days: float = 0.0
+    available_qty: Optional[int] = None  # supplier said it can only supply this much more for now (None = no limit)
+    availability_note: str = ""
+
+
+class TransferSource(BaseModel):
+    """Another dark store that can spare stock after covering its OWN protection interval."""
+    node_id: str
+    surplus: int
+    lead_days: int = 1
+    cost_per_unit: float = 0.05
+    remaining_shelf_life_days: Optional[int] = None
+
+
+class TransferLine(BaseModel):
+    from_node: str
+    qty: int
+
+
+class DemandAssumption(BaseModel):
+    """Demand the plan is built on, when it differs from the forecast (Scenario 3)."""
+    per_day: float
+    until_day: Optional[int] = None  # exclusive day offset; None = the whole horizon
+    reason: str = ""
 
 
 class PlanLine(BaseModel):
@@ -46,10 +69,15 @@ class PlanLine(BaseModel):
 
 class Plan(BaseModel):
     lines: list[PlanLine] = Field(default_factory=list)
+    transfers: list[TransferLine] = Field(default_factory=list)
 
     @property
     def total_qty(self) -> int:
         return sum(line.qty for line in self.lines)
+
+    @property
+    def transfer_qty(self) -> int:
+        return sum(t.qty for t in self.transfers)
 
 
 class ProjectionDay(BaseModel):
@@ -106,7 +134,8 @@ class Option(BaseModel):
     kind: str  # do_nothing | as_recommended | standard | express | bridge | two_drops | within_budget | waste_free
     label: str
     plan: Plan
-    total_qty: int
+    total_qty: int  # purchased units (transfers are in transfer_qty)
+    transfer_qty: int = 0
     purchase_cost: float
     express_premium: float
     decision_cost: float  # cost that differs between options (see engine/cost.py)
@@ -122,6 +151,22 @@ class Option(BaseModel):
     hard_ok: bool
     soft_issues: list[str]
     notes: list[str] = Field(default_factory=list)
+
+
+class DemandSignal(BaseModel):
+    """What recent sales say about demand vs the forecast (Scenario 3). Engine facts + a suggested assumption."""
+    forecast_per_day: float
+    recent_7d_avg: Optional[float]
+    recent_3d_avg: Optional[float]
+    yesterday: Optional[int]
+    ratio_7d: Optional[float]
+    elevated_days_last_7: int
+    elevated_days_explained_by_promotion: int
+    stockout_days_last_7: int
+    promotion: Optional[dict] = None
+    classification: str  # normal | sustained_increase | promotion | one_off_spike | censored_drop | sustained_decrease
+    explanation: str
+    suggested_assumption: Optional[DemandAssumption] = None
 
 
 class Anomaly(BaseModel):

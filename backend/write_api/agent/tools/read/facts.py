@@ -39,9 +39,9 @@ def _ns(a, c: ToolContext):
 
 
 def situation(_: NoArgs, c: ToolContext) -> dict:
-    if c.recommendation_id:
-        return c.read.get(f"/situation/recommendations/{c.recommendation_id}")
-    return {"type": "unknown", "node": c.node, "sku": c.sku}
+    path = {"recommendation": "recommendations", "supplier_event": "supplier-events",
+            "demand_alert": "demand-alerts"}[c.trigger_type]
+    return c.read.get(f"/situation/{path}/{c.trigger_ref}")
 
 
 def sku_profile(a: SkuOnly, c: ToolContext) -> dict:
@@ -97,7 +97,7 @@ def other_nodes(a: SkuOnly, c: ToolContext) -> dict:
 
 
 TOOLS = [
-    Tool("get_situation", "read", "What triggered this run (e.g. the recommendation to review: node, SKU, qty, supplier).", NoArgs, situation),
+    Tool("get_situation", "read", "What triggered this run: a recommendation to review, a supplier's shortfall message on a PO, or a demand alert.", NoArgs, situation),
     Tool("get_sku_profile", "read", "Product facts: storage zone, unit volume, shelf life, criticality, unit margin, review period.", SkuOnly, sku_profile),
     Tool("get_inventory", "read", "Stock on hand now, when it was last physically counted, and remaining shelf life.", NodeSku, inventory),
     Tool("get_open_pos", "read", "Purchase orders already placed and not yet received: qty, status, expected delivery date.", NodeSku, open_pos),
@@ -108,5 +108,5 @@ TOOLS = [
     Tool("get_supplier_performance", "read", "A supplier's observed fill rate and on-time rate.", SupplierArg, supplier_performance),
     Tool("get_budget", "read", "Budget for the SKU's category at this store: total, committed, remaining.", NodeSku, budget),
     Tool("get_storage_status", "read", "Free storage (litres) per day in the SKU's temperature zone, after other products' use.", StorageArgs, storage),
-    Tool("get_other_nodes_stock", "read", "Stock of this SKU at the other dark stores (possible transfers).", SkuOnly, other_nodes),
+    Tool("get_other_nodes_stock", "read", "Other dark stores' stock of this SKU and how much each can SPARE after covering its own need (transfers arrive in 1 day).", SkuOnly, other_nodes),
 ]

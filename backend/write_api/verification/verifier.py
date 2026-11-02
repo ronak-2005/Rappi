@@ -14,13 +14,14 @@ from sqlmodel import Session
 from shared.config.policy import Policy
 from shared.db import snapshot
 from shared.domain.decision import ExecutionResult, VerificationReport
-from shared.domain.planning import Option, Plan
+from shared.domain.planning import DemandAssumption, Option, Plan
 from shared.engine.options import evaluate_plan, requirement
 
 
 def verify(session: Session, policy: Policy, *, node: str, sku: str, expected: Option, execution: ExecutionResult,
-           recommendation_id: Optional[str] = None) -> VerificationReport:
-    ctx = snapshot.build_context(session, node, sku, recommendation_id)
+           recommendation_id: Optional[str] = None, demand: Optional[DemandAssumption] = None) -> VerificationReport:
+    # same demand basis the plan was approved on (forecast, or the agent's evidence-backed assumption)
+    ctx = snapshot.build_context(session, node, sku, recommendation_id, demand_assumption=demand)
     actual = evaluate_plan(ctx, policy, Plan())  # the executed POs are now open receipts in the DB
     ss = requirement(ctx, policy).safety_stock
 

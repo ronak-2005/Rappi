@@ -16,6 +16,8 @@ class NodeSpec(BaseModel):
     id: str
     name: str
     city: str = ""
+    transfer_lead_days: int = 1
+    transfer_cost_per_unit: float = 0.05
 
 
 class ZoneSpec(BaseModel):
@@ -155,11 +157,30 @@ class RecommendationSpec(BaseModel):
     source: str = "replenishment_engine"
 
 
+class SupplierEventSpec(BaseModel):
+    id: str
+    po_id: str
+    confirmed_qty: int
+    message: str
+    unavailable_days: int = 14  # the supplier can't supply more of this SKU for this long
+
+
+class DemandAlertSpec(BaseModel):
+    id: str
+    node: str
+    sku: str
+    message: str
+
+
 class TriggerSpec(BaseModel):
     type: Literal["recommendation", "supplier_event", "demand_alert"]
     recommendation: Optional[RecommendationSpec] = None
-    supplier_event: Optional[dict] = None
-    demand_alert: Optional[dict] = None
+    supplier_event: Optional[SupplierEventSpec] = None
+    demand_alert: Optional[DemandAlertSpec] = None
+
+    @property
+    def ref(self) -> str:
+        return (self.recommendation or self.supplier_event or self.demand_alert).id
 
 
 class BehaviourSpec(BaseModel):
@@ -174,8 +195,11 @@ class BehaviourSpec(BaseModel):
 class ExpectedSpec(BaseModel):
     """Hand-computed ground truth used by graders. See `notes` for the arithmetic."""
     decision: list[Literal["accept", "modify", "reject", "investigate", "escalate"]]
-    qty_range: Optional[tuple[int, int]] = None  # total qty across all order lines
+    qty_range: Optional[tuple[int, int]] = None  # total PURCHASED qty across all order lines
     lines: Optional[int] = None
+    transfers: Optional[int] = None  # number of transfer lines in the decision
+    transfer_qty_range: Optional[tuple[int, int]] = None
+    demand_per_day_range: Optional[tuple[float, float]] = None  # the demand assumption the decision should use
     supplier: Optional[str] = None  # expected supplier when it matters (single-line decisions)
     replan_qty_range: Optional[tuple[int, int]] = None  # extra qty ordered after a failed verification
     required_tools: list[str] = Field(default_factory=list)

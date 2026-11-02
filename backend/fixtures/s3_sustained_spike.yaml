@@ -1,0 +1,57 @@
+id: s3_sustained_spike
+scenario: S3
+title: "Sales jumped 80% for a whole week, no promotion"
+description: >
+  Milk sold ~180/day for 7 days against a forecast of 100, with no promotion or stockout: a real level change. The open PO and the normal order size are no longer enough; the agent must plan on the new level.
+today: 2026-11-02
+now_hour: 10
+
+world:
+  nodes:
+    - {id: CHAP, name: Chapinero, city: Bogotá}
+  storage_zones:
+    - {node: CHAP, zone: chilled, capacity_l: 2200, other_skus_used_l: 600}
+  skus:
+    - {id: MILK1L, name: "Whole milk 1L", category: dairy, zone: chilled, unit_volume_l: 1.0,
+       shelf_life_days: 14, criticality: high, unit_margin: 0.40, review_period_days: 7}
+  inventory:
+    - {node: CHAP, sku: MILK1L, on_hand: 400, last_counted_days_ago: 1, remaining_shelf_life_days: 8}
+  forecasts:
+    - {node: CHAP, sku: MILK1L, units_per_day: 100, sigma: 30, days: 30}
+  sales_history:
+    - {node: CHAP, sku: MILK1L, daily: [101, 97, 104, 99, 96, 103, 100, 176, 181, 179, 184, 178, 182, 180]}
+  suppliers:
+    - {id: SUP_A, name: "Andes Dairy", fill_rate: 0.97, on_time_rate: 0.95, cutoff_hour: 14}
+  supplier_terms:
+    - {supplier: SUP_A, sku: MILK1L, unit_cost: 1.20, moq: 500, case_pack: 20, lead_time_days: 3,
+       remaining_shelf_life_days: 12}
+  open_pos:
+    - {id: PO-4001, node: CHAP, sku: MILK1L, supplier: SUP_A, qty: 400, unit_cost: 1.20,
+       arrives_in_days: 2, ordered_days_ago: 1, remaining_shelf_life_days: 12}
+  budgets:
+    - {node: CHAP, category: dairy, total: 2000, committed: 480}
+
+trigger:
+  type: demand_alert
+  demand_alert:
+    id: AL-PIKE
+    node: CHAP
+    sku: MILK1L
+    message: "Sales of MILK1L at CHAP were 80% above forecast on each of the last 7 days."
+
+expected:
+  decision: [modify]
+  qty_range: [1100, 1240]
+  lines: 1
+  supplier: SUP_A
+  demand_per_day_range: [165, 195]
+  required_tools: [get_sales_history, get_promotions, analyze_demand, get_open_pos, get_inventory]
+  approval_required: false
+  pos_created: 1
+  final_verification: [OK]
+  notes: |
+    analyze_demand: 7/7 days elevated, avg 180, no promotion → sustained_increase.
+    On 180/day: need = 1800 + 157 − (400 + 400 PO) = 1157 → 1160 (case 20), arrives day 3.
+    Stock: d0 220, d1 40, d2 40 + 400 → 260, d3 260 + 1160 = 1420 L ≤ 1600 L free.
+    Day-9 close = 400 + 400 + 1160 − 1800 = 160 ≥ 157. Budget 1392 ≤ 1520.
+    On the forecast (100/day) the need would be 357 → MOQ 500 → short by ~650 units.
