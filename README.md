@@ -269,23 +269,69 @@ the live runs.
 3. **Learning.** Every supplier answer updates its fill rate and on-time rate. A shortfall marks the
    supplier unavailable.
 
-### Domain decisions
-- **Day-by-day projection, not one formula.**
-  - Storage overflows on a specific day and food expires lot by lot.
-  - Lost sales are lost: quick-commerce customers don't wait for backorders.
-- **Protection interval = arrival offset (lead time, order cut-off, delivery weekdays) + review period.**
-  - Safety stock `z·√(Σσ²_d + d̄²σ²_L)` sits on the *need* side, never counted as supply.
-- **Hard vs soft rules.**
-  - **Hard (never overridden):** storage on every day, shelf life, MOQ/case pack, supplier availability,
-    delivery calendar, duplicates, transfer surplus.
-  - **Soft (needs a human):** budget, avoidable stockout, below safety stock, PO value, buying >30%
-    *more* than recommended, express premium, supplier reliability, demand above the evidence.
-  - Buying *less* than recommended needs no approval when the projection proves coverage, so automation
-    keeps its value.
-- **Express is a bridge, not a default.** It is sized to keep stock ≥ safety stock until the standard
-  delivery arrives.
-- **Transfers take only another store's surplus** (beyond its own need), so the stockout isn't simply
-  moved.
+### Rules at a glance
+- **Hard rules (never overridden, not even by a buyer's edit):** storage on every day, shelf life,
+  MOQ/case pack, supplier availability, delivery calendar, no duplicate orders, transfer only from surplus.
+- **Soft rules (allowed only with a buyer's approval):** budget, avoidable stockout, below safety stock,
+  order value, buying >30% *more* than recommended, express premium, supplier reliability, demand above
+  the evidence.
+- **How the need is computed:**
+  - The protection interval is the arrival offset (lead time, order cut-off, delivery weekdays) plus
+    the review period.
+  - Safety stock `z·√(Σσ²_d + d̄²σ²_L)` sits on the *need* side.
+  - Stock is projected day by day with first-expiring-first lots; unmet demand is a lost sale, not a
+    backorder.
+
+---
+
+## Real purchasing problems and how the agent counters them
+
+These are the buyer's problems, not technical ones. Each has a scenario in `backend/fixtures/` that
+proves the counter-measure works.
+
+### When the numbers lie
+| Problem | Why it hurts | How we counter it | Proven by |
+|---|---|---|---|
+| **The recommendation is wrong** (e.g. it forgot an order already on its way) | Buying twice: cash tied up, shelves overflow, stock expires | The real need is recomputed from scratch: demand + safety stock − stock on hand − orders arriving *in time* (each on its real date). The agent never trusts the recommended quantity | `s1_modify_open_po_ignored` (800 → 500) |
+| **The stock record is wrong** ("phantom stock": the system says 0 but the product keeps selling) | Ordering on top of bad data overflows the store, or misses a real stockout | Data-quality checks flag sales with zero stock and stale counts. The agent stops and asks for a stock count instead of buying | `s1_investigate_phantom_stock` |
+| **Sales hide real demand** (days the shelf was empty show low sales) | The forecast learns too low and the next order is too small | Stockout days are flagged and left out of averages. *Acting* on it (cutting an existing order) is listed as a limitation | data-quality check `censored_demand` |
+| **Safety stock counted twice** | Treating the buffer as available stock quietly removes the buffer | Safety stock sits on the *need* side of the formula, never on the supply side | engine tests |
+
+### When the order can't be delivered as planned
+| Problem | Why it hurts | How we counter it | Proven by |
+|---|---|---|---|
+| **No room on delivery day** (the total is right, but it all arrives at once) | The chilled room overflows and stock is lost | Stock is projected day by day, and storage is checked on *every* day for its temperature zone. The order is split into two deliveries | `s4_storage_two_drops` |
+| **Cheap supplier's minimum order would expire** | Paying less per unit but throwing a third away | Expiry is projected lot by lot (first-expiring sells first). The agent switches to a supplier with a smaller minimum, or escalates if there isn't one | `s1_modify_moq_vs_shelf_life`, `s4_moq_exceeds_shelf_life` |
+| **Standard delivery arrives after we run out** | Lost sales, and in quick-commerce the customer may not come back | A small express "bridge" covers only the gap (keeping safety stock), and the rest goes standard. Paying for express on everything needs approval | `s4_leadtime_express_bridge` |
+| **Delivery days and cut-off times** ("3-day lead time" isn't 3 days if the supplier only delivers Tue/Fri) | Plans assume stock that won't be there | The arrival date is computed from the supplier's cut-off hour and delivery weekdays, not "today + lead time" | engine tests |
+
+### When suppliers don't do what they said
+| Problem | Why it hurts | How we counter it | Proven by |
+|---|---|---|---|
+| **The supplier confirms only part of the order** | The plan silently stops covering demand | After every order, the supplier's *real* answer is re-projected. If it's short, the agent re-plans for the remaining gap (or escalates) | `s4_feedback_partial_confirm` |
+| **Re-ordering from the supplier that just failed** | The same failure twice | A shortfall or rejection records that supplier as unavailable, and a hard rule blocks ordering from it | `s2_alt_supplier` |
+| **Fixing one store by emptying another** | The stockout just moves to the next store | A transfer can only take a store's *surplus*, beyond its own need. The agent compares a transfer with a second supplier | `s2_transfer_from_node` |
+| **Panic when the shortfall doesn't matter** | Needless extra orders and cost | The agent first checks whether stock plus the confirmed part still covers the cycle. If yes, it does nothing | `s2_partial_but_sufficient` |
+| **Every option fails** (the second supplier refuses too) | An agent retrying forever, or giving up silently | Re-plans are capped. With nothing feasible, it escalates to a buyer with the facts | `s2_alt_supplier_rejects_escalate` |
+| **The supplier's system times out after taking the order** | A naive retry creates a duplicate order | Every order carries an idempotency key, so a retry returns the original order and never a second one | `s4_timeout_retry_idempotent` |
+| **Suppliers that keep under-delivering** | Plans keep trusting a bad supplier | Each answer updates the supplier's fill rate and on-time rate. Ordering from a low-reliability supplier needs approval | supplier learning |
+
+### When demand changes
+| Problem | Why it hurts | How we counter it | Proven by |
+|---|---|---|---|
+| **A real, lasting jump in sales** | The existing plan runs out early | `analyze_demand` sees most days elevated with no promotion, and the agent plans on the new level | `s3_sustained_spike` |
+| **A promotion spike mistaken for a trend** | Overbuying ~500 units after the promotion ends | Elevated days inside a promotion count only until it ends; the plan is kept | `s3_promo_spike_temporary` |
+| **A one-day spike** (e.g. a bulk order) | Overreacting to noise | One elevated day is classified as a one-off, and the forecast stands | `s3_one_day_noise` |
+| **Inflating demand to justify buying more** | An agent that talks itself into big orders | Any demand assumption must be stated in the decision. Assuming more than recent sales support needs a buyer's approval | rule `forecast_override` |
+
+### When money and people are involved
+| Problem | Why it hurts | How we counter it | Proven by |
+|---|---|---|---|
+| **The budget is too small for the full need** | Either overspend or knowingly risk running out | Both breaks are *soft* rules: the agent proposes the plan and a buyer decides, with an editable quantity | `s4_budget_partial_needs_approval` |
+| **Knowingly accepting lost sales** | "Buy nothing" looks safe but empties the shelf | Doing nothing is checked like any plan; projected avoidable lost sales need a human | `s4_moq_exceeds_shelf_life` |
+| **Buying far more than the system suggested** | Silent overspending | More than 30% above the recommendation needs approval. Buying *less* doesn't, when the projection proves coverage | rule `increase_over_recommendation` |
+| **Asking humans too often** (alert fatigue) | Buyers stop reading the alerts | Approval is needed only when a soft rule is actually broken. Clean plans execute on their own, so the "rules only" run needs approval in just 1 of 18 scenarios | evaluation |
+| **Accountability for overrides** | Nobody knows who decided what | Every approval, rejection and edit is recorded with who and why. A buyer's edit is re-checked against the hard rules (a human can't break those either) | `test_human_edit_is_still_checked_by_hard_rules` |
 
 ---
 
