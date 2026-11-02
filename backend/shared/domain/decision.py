@@ -12,7 +12,7 @@ DecisionType = Literal["accept", "modify", "reject", "investigate", "escalate"]
 class DecisionReason(BaseModel):
     factor: str = Field(description="short name, e.g. open_po_ignored, budget, storage, shelf_life")
     finding: str = Field(description="what the evidence shows, with the numbers")
-    evidence: list[str] = Field(default_factory=list, description="tool_call ids whose results support this")
+    evidence: list[str] = Field(default_factory=list, description="evidence_id values of the tool results that support this")
 
 
 class Decision(BaseModel):

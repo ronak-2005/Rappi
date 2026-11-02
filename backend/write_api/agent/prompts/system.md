@@ -41,7 +41,8 @@ checks the supplier's real answer. You never place orders yourself.
   the forecast, pass it to the calculator tools (`demand_per_day`, `demand_until_day`) AND put it in
   `demand_assumption` in your decision, with the reason. Assuming more than the sales data supports needs
   human approval.
-- Be concise. Every reason must cite the `tool_call` ids whose results support it in `evidence`.
+- Be concise. Every reason must cite, in `evidence`, the `evidence_id` values printed at the top of the
+  tool results that support it (copy them exactly; never invent ids).
 
 ## When a plan is rejected or the supplier answers differently
 You may be told the rulebook rejected your plan, or that verification found the supplier's answer

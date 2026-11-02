@@ -1,12 +1,12 @@
 # Evaluation report
 
-Generated 2026-11-02T21:00:08+00:00 · LLM runs repeated 3× (baseline is deterministic, run once).
+Generated 2026-11-02T21:39:12+00:00 · LLM runs repeated 3× (baseline is deterministic, run once).
 
 ## Overall
 
-| Brain | Runs | All checks pass | Crashed |
-|---|---|---|---|
-| baseline | 18 | 100% | 0 |
+| Brain | Graded runs | All checks pass | Crashed | Not run / provider errors |
+|---|---|---|---|---|
+| baseline | 18 | 100% | 0 | 0 |
 
 ## Per scenario
 

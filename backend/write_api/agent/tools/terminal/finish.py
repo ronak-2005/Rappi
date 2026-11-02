@@ -27,7 +27,7 @@ def _never_called(*_):  # pragma: no cover - the orchestrator handles terminal t
 TOOLS = [
     Tool("submit_decision", "terminal",
          "Submit your final decision: type (accept | modify | reject | investigate | escalate), order lines for "
-         "accept/modify, reasons that cite tool_call ids as evidence, risks, confidence and a plain summary. "
+         "accept/modify, reasons that cite the evidence_id of supporting tool results, risks, confidence and a plain summary. "
          "Code then validates it, asks a human if needed, places the orders and verifies the result.",
          DecisionArgs, _never_called),
     Tool("escalate", "terminal", "Hand the situation to a human buyer when no safe decision is possible.",

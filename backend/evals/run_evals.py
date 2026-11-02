@@ -25,6 +25,9 @@ from shared.config.settings import BACKEND_DIR
 from shared.domain.fixtures import list_fixture_files
 
 REPORTS = BACKEND_DIR / "evals" / "reports"
+# Provider problems are not agent mistakes: such runs are reported separately and left out of pass rates.
+INFRA_ERRORS = ("RateLimitError", "APIConnectionError", "APITimeoutError", "AuthenticationError",
+                "InternalServerError", "ConfigurationError")
 
 
 def brains(env_files: list[str], include_baseline: bool) -> list[tuple[str, LLMSettings, int]]:
@@ -65,8 +68,11 @@ def main(argv=None) -> int:
     results = []  # one row per run
     for label, settings, reps in plan:
         n = reps if reps > 0 else a.repeats
+        quota_hit = False
         for fx in fixtures:
             for i in range(n):
+                if quota_hit:
+                    break
                 if a.pause and label != "baseline":
                     time.sleep(a.pause)
                 t0 = time.time()
@@ -80,14 +86,22 @@ def main(argv=None) -> int:
                                  "replans": rec.run["replans"]}
                     except Exception as exc:  # a crashed run is a failed run, not a crashed eval
                         checks, status, err, decision, stats = [], "crashed", f"{type(exc).__name__}: {exc}", None, {}
+                infra = bool(err) and any(e in err for e in INFRA_ERRORS)
+                if infra:
+                    status = "infra_error"
+                    quota_hit = "per-day" in err or "per day" in err
                 ok = bool(checks) and all(c.passed for c in checks)
                 results.append({"brain": label, "fixture": fx.id, "scenario": fx.scenario, "repeat": i,
-                                "status": status, "decision": decision, "all_pass": ok, "error": err,
+                                "status": status, "decision": decision, "all_pass": ok, "error": err, "infra": infra,
                                 "seconds": round(time.time() - t0, 1), **stats,
                                 "checks": [c.__dict__ for c in checks]})
                 failed = [c.name for c in checks if not c.passed]
-                print(f"{label:>22} {fx.id:<36} #{i} {'PASS' if ok else 'FAIL'} {decision or '-':<11} "
-                      f"{status:<10} {('failed: ' + ', '.join(failed)) if failed else ''}{(' ' + err) if err else ''}")
+                verdict = "INFRA" if infra else ("PASS" if ok else "FAIL")
+                print(f"{label:>22} {fx.id:<36} #{i} {verdict} {decision or '-':<11} "
+                      f"{status:<11} {('failed: ' + ', '.join(failed)) if failed and not infra else ''}"
+                      f"{(' ' + err[:160]) if err else ''}", flush=True)
+                if quota_hit:
+                    print(f"{label}: provider daily quota reached — skipping its remaining runs", flush=True)
 
     report = summarize(results, [b[0] for b in plan], a.repeats, fixtures)
     REPORTS.mkdir(parents=True, exist_ok=True)
@@ -99,6 +113,8 @@ def main(argv=None) -> int:
 
 
 def summarize(results: list[dict], brain_labels: list[str], repeats: int, fixtures) -> dict:
+    infra = [r for r in results if r.get("infra")]
+    results = [r for r in results if not r.get("infra")]
     by_fb = defaultdict(list)
     for r in results:
         by_fb[(r["fixture"], r["brain"])].append(r)
@@ -131,9 +147,10 @@ def summarize(results: list[dict], brain_labels: list[str], repeats: int, fixtur
     overall = {}
     for b in brain_labels:
         runs = [r for r in results if r["brain"] == b]
-        if runs:
-            overall[b] = {"runs": len(runs), "all_checks_pass_rate": sum(r["all_pass"] for r in runs) / len(runs),
-                          "crashed": sum(r["status"] == "crashed" for r in runs)}
+        skipped = sum(1 for r in infra if r["brain"] == b)
+        if runs or skipped:
+            overall[b] = {"runs": len(runs), "all_checks_pass_rate": (sum(r["all_pass"] for r in runs) / len(runs)) if runs else None,
+                          "crashed": sum(r["status"] == "crashed" for r in runs), "infra_errors": skipped}
     return {"generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "repeats": repeats,
             "brains": brain_labels, "overall": overall, "fixtures": fx_rows, "checks": checks}
 
@@ -143,9 +160,10 @@ def to_markdown(rep: dict) -> str:
     b = rep["brains"]
     lines = [f"# Evaluation report", "", f"Generated {rep['generated_at']} · LLM runs repeated {rep['repeats']}× "
              "(baseline is deterministic, run once).", "", "## Overall", "",
-             "| Brain | Runs | All checks pass | Crashed |", "|---|---|---|---|"]
+             "| Brain | Graded runs | All checks pass | Crashed | Not run / provider errors |", "|---|---|---|---|---|"]
     for name, o in rep["overall"].items():
-        lines.append(f"| {name} | {o['runs']} | {pct(o['all_checks_pass_rate'])} | {o['crashed']} |")
+        rate = pct(o['all_checks_pass_rate']) if o['all_checks_pass_rate'] is not None else "—"
+        lines.append(f"| {name} | {o['runs']} | {rate} | {o['crashed']} | {o.get('infra_errors', 0)} |")
     lines += ["", "## Per scenario", "", "| Scenario | Expected | " + " | ".join(b) + " |",
               "|---|---|" + "---|" * len(b)]
     for f in rep["fixtures"]:

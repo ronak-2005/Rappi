@@ -203,7 +203,8 @@ class Orchestrator:
             c.called[tc.id] = tc.name
         self._step(c, "tool_call", tc.name, {"id": tc.id, "arguments": tc.arguments, "ok": out.ok,
                                              "result": out.result})
-        self._tool_reply(c, tc.id, out.result)
+        # the model can't see provider-assigned call ids, so each result carries its own id to cite as evidence
+        self._tool_reply(c, tc.id, {"evidence_id": tc.id, **out.result})
 
     # ------------------------------------------------------------------ decisions
     def _terminal(self, c: _Ctx, tc) -> str:
