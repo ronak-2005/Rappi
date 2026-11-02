@@ -15,7 +15,7 @@ from typing import Optional
 from pydantic import BaseModel
 
 from shared.config.policy import Policy
-from shared.domain.planning import Option, Plan, PlanLine, Receipt, Requirement, SupplierOffer
+from shared.domain.planning import Option, Plan, PlanLine, Projection, Receipt, Requirement, SupplierOffer
 from shared.engine.calendar import arrival_day, is_delivery_day
 from shared.engine.cost import decision_cost
 from shared.engine.projection import project
@@ -103,6 +103,12 @@ def unavoidable_lost(ctx: OptionContext, policy: Policy) -> float:
 # ---------------------------------------------------------------- evaluation
 def evaluate_plan(ctx: OptionContext, policy: Policy, plan: Plan, *, option_id: str = "custom",
                   kind: str = "custom", label: str = "Custom plan") -> Option:
+    return evaluate_with_projection(ctx, policy, plan, option_id=option_id, kind=kind, label=label)[0]
+
+
+def evaluate_with_projection(ctx: OptionContext, policy: Policy, plan: Plan, *, option_id: str = "custom",
+                             kind: str = "custom", label: str = "Custom plan") -> tuple[Option, Projection]:
+    """Project the plan, price it and run every rule check. Returns the option and its day-by-day projection."""
     checks: dict[str, bool] = {
         "supplier_known": True, "supplier_active": True, "express_available": True, "qty_positive": True,
         "moq": True, "case_pack": True, "max_qty": True, "delivery_calendar": True,
@@ -181,13 +187,14 @@ def evaluate_plan(ctx: OptionContext, policy: Policy, plan: Plan, *, option_id: 
         unit_margin=ctx.unit_margin, stockout_multiplier=policy.costs.stockout_cost_multiplier,
         expired_units_new=proj.expired_units_new,
     )
-    return Option(
+    option = Option(
         id=option_id, kind=kind, label=label, plan=plan, total_qty=total_qty, purchase_cost=purchase,
         express_premium=round(premium, 2), decision_cost=cost, cost_breakdown=breakdown,
         lost_units=proj.lost_units, expired_units=proj.expired_units_new, waste_pct=waste_pct,
         min_close=proj.min_close, end_close=proj.end_close, over_capacity_days=new_over,
         below_ss_days=proj.below_ss_days, checks=checks, hard_ok=hard_ok, soft_issues=soft, notes=notes,
     )
+    return option, proj
 
 
 # ---------------------------------------------------------------- generation
