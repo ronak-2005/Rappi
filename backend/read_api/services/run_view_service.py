@@ -19,8 +19,11 @@ def run_detail(session: Session, run_id: str) -> dict:
     r = runs.run(session, run_id)
     if r is None:
         raise NotFoundError("run", run_id)
+    data = r.model_dump(exclude={"memory"})  # the full LLM conversation stays out of this hot path
+    mem = r.memory or {}
     return {
-        **r.model_dump(),
+        **data,
+        "context": {"node": mem.get("node"), "sku": mem.get("sku"), "recommendation_id": mem.get("recommendation_id")},
         "finished": r.status in FINISHED,
         "purchase_orders": [{**p.model_dump(), "events": [e.model_dump() for e in orders.po_events(session, p.id)]}
                             for p in orders.purchase_orders(session, run_id=run_id)],

@@ -26,8 +26,9 @@ def get_requirement(session: Session, policy: Policy, node: str, sku: str, rec_i
     out["arrival_date"] = _day(ctx, r.arrival_day)
     out["formula"] = (f"need = demand over {r.horizon_days} days ({r.demand_over_horizon:g}) + safety stock "
                       f"({r.safety_stock:g}) − on hand ({r.on_hand:g}) − open POs arriving in time "
-                      f"({r.open_receipts_in_horizon:g}) = {r.net_requirement:g} → order {r.order_qty} "
-                      f"(MOQ {r.moq}, case pack {r.case_pack})")
+                      f"({r.open_receipts_in_horizon:g}) = {r.net_requirement:g} units needed; rounded to "
+                      f"{r.rounded_for_supplier}'s MOQ {r.moq} / case pack {r.case_pack} → {r.order_qty} "
+                      f"(other suppliers round differently: see generate_options)")
     out["open_receipts"] = [x.model_dump() for x in ctx.open_receipts]
     return out
 

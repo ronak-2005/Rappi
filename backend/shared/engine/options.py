@@ -72,11 +72,13 @@ def requirement(ctx: OptionContext, policy: Policy, offer: Optional[SupplierOffe
     ref = reference_offer(ctx)
     offer = offer or ref
     arrival = earliest_arrival(ctx, ref)
-    return net_requirement(
+    req = net_requirement(
         on_hand=ctx.on_hand, demand=ctx.demand, sigmas=ctx.sigmas, open_receipts=ctx.open_receipts,
         arrival_day=arrival, review_period_days=ctx.review_period_days, z=policy.planning.service_level_z,
         lead_time_sigma_days=ref.lead_time_sigma_days, moq=offer.moq, case_pack=offer.case_pack,
     )
+    req.rounded_for_supplier = offer.supplier_id
+    return req
 
 
 def _project(ctx: OptionContext, policy: Policy, new: list[Receipt], extra_existing: list[Receipt] | None = None,

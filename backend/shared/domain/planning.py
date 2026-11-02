@@ -97,6 +97,7 @@ class Requirement(BaseModel):
     order_qty: int  # rounded up to case pack and MOQ (0 if no need)
     moq: int
     case_pack: int
+    rounded_for_supplier: str = ""  # whose MOQ / case pack `order_qty` uses
 
 
 class Option(BaseModel):

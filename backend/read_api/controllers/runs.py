@@ -36,7 +36,7 @@ async def run_stream(run_id: str, request: Request):
     db_file = request.app.state.db_file
 
     async def events():
-        last = -1
+        last, last_status = -1, None
         while True:
             if await request.is_disconnected():
                 return
@@ -46,10 +46,11 @@ async def run_stream(run_id: str, request: Request):
             for step in steps:
                 last = step["seq"]
                 yield {"event": "step", "data": json.dumps(step, default=str)}
-            if detail["finished"] or detail["status"] == "awaiting_approval":
+            if steps or detail["status"] != last_status:  # only when something changed
+                last_status = detail["status"]
                 yield {"event": "run", "data": json.dumps(detail, default=str)}
-                if detail["finished"]:
-                    return
+            if detail["finished"]:
+                return
             await asyncio.sleep(0.5)
 
     return EventSourceResponse(events())
