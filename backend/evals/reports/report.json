@@ -1,0 +1,360 @@
+{
+  "generated_at": "2026-11-02T20:40:23+00:00",
+  "repeats": 3,
+  "brains": [
+    "baseline"
+  ],
+  "overall": {
+    "baseline": {
+      "runs": 11,
+      "all_checks_pass_rate": 1.0,
+      "crashed": 0
+    }
+  },
+  "fixtures": [
+    {
+      "id": "s1_accept",
+      "scenario": "S1",
+      "title": "Recommendation is correct",
+      "expected": [
+        "accept"
+      ],
+      "by_brain": {
+        "baseline": {
+          "runs": 1,
+          "all_checks_pass_rate": 1.0,
+          "decisions": [
+            "accept"
+          ],
+          "failed_checks": [],
+          "avg_tool_calls": 12.0,
+          "avg_seconds": 0.3
+        }
+      }
+    },
+    {
+      "id": "s1_investigate_phantom_stock",
+      "scenario": "S1",
+      "title": "Stock record says 0 but the product keeps selling",
+      "expected": [
+        "investigate",
+        "escalate"
+      ],
+      "by_brain": {
+        "baseline": {
+          "runs": 1,
+          "all_checks_pass_rate": 1.0,
+          "decisions": [
+            "investigate"
+          ],
+          "failed_checks": [],
+          "avg_tool_calls": 11.0,
+          "avg_seconds": 0.2
+        }
+      }
+    },
+    {
+      "id": "s1_modify_moq_vs_shelf_life",
+      "scenario": "S1",
+      "title": "Cheapest supplier's MOQ would expire on the shelf",
+      "expected": [
+        "modify"
+      ],
+      "by_brain": {
+        "baseline": {
+          "runs": 1,
+          "all_checks_pass_rate": 1.0,
+          "decisions": [
+            "modify"
+          ],
+          "failed_checks": [],
+          "avg_tool_calls": 12.0,
+          "avg_seconds": 0.3
+        }
+      }
+    },
+    {
+      "id": "s1_modify_open_po_ignored",
+      "scenario": "S1",
+      "title": "Recommendation of 800 ignores an open PO",
+      "expected": [
+        "modify"
+      ],
+      "by_brain": {
+        "baseline": {
+          "runs": 1,
+          "all_checks_pass_rate": 1.0,
+          "decisions": [
+            "modify"
+          ],
+          "failed_checks": [],
+          "avg_tool_calls": 12.0,
+          "avg_seconds": 0.3
+        }
+      }
+    },
+    {
+      "id": "s1_reject_overstock",
+      "scenario": "S1",
+      "title": "Large PO already arriving: no purchase needed",
+      "expected": [
+        "reject"
+      ],
+      "by_brain": {
+        "baseline": {
+          "runs": 1,
+          "all_checks_pass_rate": 1.0,
+          "decisions": [
+            "reject"
+          ],
+          "failed_checks": [],
+          "avg_tool_calls": 11.0,
+          "avg_seconds": 0.3
+        }
+      }
+    },
+    {
+      "id": "s4_budget_partial_needs_approval",
+      "scenario": "S4",
+      "title": "Not enough budget left for the full need",
+      "expected": [
+        "accept",
+        "modify"
+      ],
+      "by_brain": {
+        "baseline": {
+          "runs": 1,
+          "all_checks_pass_rate": 1.0,
+          "decisions": [
+            "accept"
+          ],
+          "failed_checks": [],
+          "avg_tool_calls": 12.0,
+          "avg_seconds": 0.3
+        }
+      }
+    },
+    {
+      "id": "s4_feedback_partial_confirm",
+      "scenario": "S4",
+      "title": "Supplier confirms only half of the agent's PO",
+      "expected": [
+        "modify"
+      ],
+      "by_brain": {
+        "baseline": {
+          "runs": 1,
+          "all_checks_pass_rate": 1.0,
+          "decisions": [
+            "modify"
+          ],
+          "failed_checks": [],
+          "avg_tool_calls": 15.0,
+          "avg_seconds": 0.4
+        }
+      }
+    },
+    {
+      "id": "s4_leadtime_express_bridge",
+      "scenario": "S4",
+      "title": "Standard delivery arrives after we run out",
+      "expected": [
+        "modify"
+      ],
+      "by_brain": {
+        "baseline": {
+          "runs": 1,
+          "all_checks_pass_rate": 1.0,
+          "decisions": [
+            "modify"
+          ],
+          "failed_checks": [],
+          "avg_tool_calls": 12.0,
+          "avg_seconds": 0.3
+        }
+      }
+    },
+    {
+      "id": "s4_moq_exceeds_shelf_life",
+      "scenario": "S4",
+      "title": "Only supplier's MOQ would mostly expire",
+      "expected": [
+        "escalate",
+        "investigate"
+      ],
+      "by_brain": {
+        "baseline": {
+          "runs": 1,
+          "all_checks_pass_rate": 1.0,
+          "decisions": [
+            "escalate"
+          ],
+          "failed_checks": [],
+          "avg_tool_calls": 11.0,
+          "avg_seconds": 0.2
+        }
+      }
+    },
+    {
+      "id": "s4_storage_two_drops",
+      "scenario": "S4",
+      "title": "Right quantity, but it doesn't fit in the chilled room on delivery day",
+      "expected": [
+        "modify"
+      ],
+      "by_brain": {
+        "baseline": {
+          "runs": 1,
+          "all_checks_pass_rate": 1.0,
+          "decisions": [
+            "modify"
+          ],
+          "failed_checks": [],
+          "avg_tool_calls": 12.0,
+          "avg_seconds": 0.3
+        }
+      }
+    },
+    {
+      "id": "s4_timeout_retry_idempotent",
+      "scenario": "S4",
+      "title": "Supplier API times out after receiving the order",
+      "expected": [
+        "accept"
+      ],
+      "by_brain": {
+        "baseline": {
+          "runs": 1,
+          "all_checks_pass_rate": 1.0,
+          "decisions": [
+            "accept"
+          ],
+          "failed_checks": [],
+          "avg_tool_calls": 12.0,
+          "avg_seconds": 0.2
+        }
+      }
+    }
+  ],
+  "checks": [
+    {
+      "name": "decision_type",
+      "group": "decision",
+      "by_brain": {
+        "baseline": 1.0
+      }
+    },
+    {
+      "name": "quantity",
+      "group": "decision",
+      "by_brain": {
+        "baseline": 1.0
+      }
+    },
+    {
+      "name": "order_lines",
+      "group": "decision",
+      "by_brain": {
+        "baseline": 1.0
+      }
+    },
+    {
+      "name": "supplier",
+      "group": "decision",
+      "by_brain": {
+        "baseline": 1.0
+      }
+    },
+    {
+      "name": "required_evidence",
+      "group": "evidence",
+      "by_brain": {
+        "baseline": 1.0
+      }
+    },
+    {
+      "name": "evidence_gate_first_try",
+      "group": "evidence",
+      "by_brain": {
+        "baseline": 1.0
+      }
+    },
+    {
+      "name": "validated_before_acting",
+      "group": "constraints",
+      "by_brain": {
+        "baseline": 1.0
+      }
+    },
+    {
+      "name": "approval_gate",
+      "group": "constraints",
+      "by_brain": {
+        "baseline": 1.0
+      }
+    },
+    {
+      "name": "purchase_orders",
+      "group": "action",
+      "by_brain": {
+        "baseline": 1.0
+      }
+    },
+    {
+      "name": "no_duplicate_orders",
+      "group": "action",
+      "by_brain": {
+        "baseline": 1.0
+      }
+    },
+    {
+      "name": "supplier_side_orders",
+      "group": "action",
+      "by_brain": {
+        "baseline": 1.0
+      }
+    },
+    {
+      "name": "verified_after_acting",
+      "group": "validation",
+      "by_brain": {
+        "baseline": 1.0
+      }
+    },
+    {
+      "name": "final_verification",
+      "group": "validation",
+      "by_brain": {
+        "baseline": 1.0
+      }
+    },
+    {
+      "name": "run_finished_cleanly",
+      "group": "recovery",
+      "by_brain": {
+        "baseline": 1.0
+      }
+    },
+    {
+      "name": "recovered_by_replanning",
+      "group": "recovery",
+      "by_brain": {
+        "baseline": 1.0
+      }
+    },
+    {
+      "name": "replan_quantity",
+      "group": "recovery",
+      "by_brain": {
+        "baseline": 1.0
+      }
+    },
+    {
+      "name": "escalated",
+      "group": "recovery",
+      "by_brain": {
+        "baseline": 1.0
+      }
+    }
+  ]
+}
