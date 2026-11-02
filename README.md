@@ -14,6 +14,25 @@ questions.
 
 ---
 
+## Demo
+
+**1. Reviewing a recommendation with a live LLM** (Gemini 3.5 Flash-Lite, free tier; investigation sped up).
+The system wants 800 units; the agent finds the 400 already on the way and orders 500.
+
+![Reviewing a recommendation](demo/1-recommendation-review.gif)
+
+**2. The feedback loop.** The supplier confirms only 250 of 500; verification flags the gap, the agent
+re-plans with the second supplier, and the result is verified.
+
+![Feedback loop](demo/2-feedback-loop.gif)
+
+**3. Human approval.** The plan breaks the budget rule, so nothing is ordered until a buyer approves; then
+it executes and is verified.
+
+![Human approval](demo/3-human-approval.gif)
+
+---
+
 ## Quick start
 Requirements: Python 3.12+, Node 20+.
 ```bash
@@ -228,6 +247,38 @@ The LLM does what code is bad at:
 - weighing trade-offs between feasible plans;
 - explaining the decision;
 - re-planning when reality differs.
+
+---
+
+## Why this method and this logic
+
+### The method
+| Choice | Why | What I didn't do, and why not |
+|---|---|---|
+| **An agent that uses tools and then acts**, not one big prompt | The situation decides what needs checking (a supplier shortfall needs other stores and suppliers; a demand alert needs sales and promotions). An agent can look things up step by step and change course when something doesn't add up | A single prompt with all the data pasted in: it can't fetch what it didn't expect to need, can't act, and can't check the result |
+| **Code runs the flow, the model makes the choices** (a state machine around the LLM) | Order, limits and safety steps are guaranteed by code; the model only decides *what* to look at and *which* plan to pick | Letting the model run its own loop: it could skip checks, loop forever, or "decide" to place an order |
+| **A deterministic planning engine for all maths** | Exact, repeatable, testable, explainable, and shared with the safety checks | Asking the LLM to calculate: small arithmetic slips turn into wrong orders |
+| **The engine proposes options; the model chooses** | Every candidate plan is already feasible-checked and priced, so the model weighs real trade-offs instead of inventing quantities | Free-form quantities from the model, checked afterwards: more rejections, more risk |
+| **Check before acting and after acting** | Before: evidence and rules. After: what the supplier really did. A purchasing decision is only good if the goods actually arrive | Trusting the supplier's "OK" or the plan alone: partial deliveries go unnoticed |
+| **Hard rules block; soft rules ask a person** | Some things are never acceptable (overflowing storage, expired stock); others are business trade-offs a buyer should own (going over budget) | Blocking everything, which leaves no automation, or allowing everything, which takes away safety |
+| **A rules-only brain beside the LLM** | Same pipeline without a model: a no-cost demo and a baseline that shows where the LLM helps or adds risk | Evaluating the LLM alone, with no reference point |
+| **Hand-computed scenarios as ground truth** | The expected answer comes from outside the system, so a test can't just agree with itself | Grading the agent with another LLM: two guesses checking each other |
+
+### The planning logic
+| Choice | Why | What I didn't do, and why not |
+|---|---|---|
+| **Periodic review, "order up to" the need** (protection interval = lead time + review period) | Dark stores reorder on a cycle; whatever is ordered now must last until the *next* order can arrive. It's the textbook policy for this setup and easy to explain | A fixed reorder point / EOQ: it assumes continuous monitoring and steady demand, and ignores the review cycle |
+| **Safety stock = z·√(Σσ²_d + d̄²σ²_L)** at about 95% service | Covers both uncertain demand and uncertain lead times, with one knob (z) the business can tune | A fixed "+X days" buffer: too much for stable products, too little for volatile ones |
+| **Safety stock on the need side** | The buffer must still be there when the next delivery arrives | Counting it as available stock, which quietly removes it |
+| **Day-by-day projection with first-expiring-first lots** | Storage overflows on a *specific day* and food expires *lot by lot*; totals hide both | A single need formula: it passed plans that overflow the chilled room or expire on the shelf |
+| **Unmet demand is lost, not backordered** | Quick-commerce customers don't wait; they buy elsewhere | Backorders, which understate the cost of running out |
+| **Open orders counted on their real arrival date** | An order landing after the cycle doesn't protect this cycle | Counting every open order as stock now |
+| **Decision cost counts only what differs between plans** (price premium, express, holding, avoidable lost sales × margin × churn, waste, transfer) | Plans are compared on what they actually change. Purchase price isn't a loss because the goods get sold | Total purchase cost, which would always favour "buy nothing" |
+| **Express sized as a bridge** that keeps safety stock until the standard delivery | Pays for speed only on the units that need it | All-express (expensive), or a bridge that only reaches zero stock (risky) |
+| **Transfers only from surplus** | A store gives only what it doesn't need for its own cycle | Taking whatever is on another store's shelf, which just moves the stockout |
+| **Simple, readable demand rules** (a day is "elevated" above +25%; ≥5 of 7 elevated days means a real change; elevated days inside a promotion are temporary; one elevated day is noise) | A buyer can read them, argue with them and tune them, and the agent explains its call with them | A black-box anomaly model: hard to explain, and too much for 14 days of data |
+| **Forecast overrides allowed up to the evidence +10%** | Lets the agent react to real change without being able to inflate demand | No overrides (it can't react) or free overrides (it can talk itself into big orders) |
+| **Buying less than recommended needs no approval** when the projection proves coverage | Correcting over-ordering is the most common useful fix, and asking for it every time would bury buyers in approvals | Approval on every change |
 
 ---
 
