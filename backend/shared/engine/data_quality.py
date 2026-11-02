@@ -26,13 +26,15 @@ def check(
 
     sold_since_count = sum(u for d, u, _ in recent if d <= last_counted_days_ago)
     if on_hand <= 0 and receipts_last_days == 0:
-        last3 = [(d, u) for d, u, out_ in recent if d <= 3 and u > 0 and not out_]
-        if last3:
+        # Only yesterday matters: a store that genuinely sold out a few days ago is consistent with 0.
+        yesterday = next(((u, out_) for d, u, out_ in recent if d == 1), None)
+        if yesterday and yesterday[0] > 0 and not yesterday[1]:
             out.append(Anomaly(
                 code="sales_while_zero_stock", severity="high",
-                message=(f"System shows {on_hand:g} units and nothing was received, yet {sum(u for _, u in last3)} "
-                         f"units sold in the last {len(last3)} days. The stock record is wrong."),
-                evidence={"on_hand": on_hand, "recent_sales": dict(last3), "receipts_since_count": receipts_last_days},
+                message=(f"System shows {on_hand:g} units and nothing was received, yet {yesterday[0]} units "
+                         "sold yesterday without a stockout. The stock record is wrong."),
+                evidence={"on_hand": on_hand, "sold_yesterday": yesterday[0],
+                          "receipts_since_count": receipts_last_days},
             ))
 
     if last_counted_days_ago > stale_count_days:
