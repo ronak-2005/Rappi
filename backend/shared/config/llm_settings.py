@@ -2,7 +2,7 @@
 Change LLM_BASE_URL / LLM_API_KEY / LLM_MODEL in the file to switch provider or model."""
 
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -28,7 +28,7 @@ class LLMSettings(BaseSettings):
         return self.llm_model if self.llm_mode == "live" else self.llm_mode
 
 
-def load_llm_settings(env_file: Optional[str | Path] = None) -> LLMSettings:
+def load_llm_settings(env_file: str | Path | None = None) -> LLMSettings:
     """Load from `env_file` (relative paths are relative to backend/), default backend/llm.env."""
     path = Path(env_file) if env_file else BACKEND_DIR / "llm.env"
     if not path.is_absolute():

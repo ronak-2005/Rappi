@@ -8,5 +8,9 @@ def check(i: RuleInput) -> RuleResult:
     c = i.evaluation.checks
     ok = c["supplier_known"] and c["supplier_active"] and c["express_available"]
     problems = [n for n in i.evaluation.notes if "supplier" in n or "express" in n]
-    return RuleResult(rule="supplier", kind="hard", passed=ok,
-                      message="suppliers valid" if ok else "; ".join(problems) or "supplier inactive")
+    return RuleResult(
+        rule="supplier",
+        kind="hard",
+        passed=ok,
+        message="suppliers valid" if ok else "; ".join(problems) or "supplier inactive",
+    )

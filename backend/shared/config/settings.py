@@ -13,7 +13,6 @@ class AppSettings(BaseSettings):
 
     database_path: str = "var/app.db"
     read_api_url: str = "http://localhost:8001"
-    write_api_url: str = "http://localhost:8002"
     supplier_api_url: str = "http://localhost:8003"
     policy_path: str = "policy.yaml"
     fixtures_dir: str = "fixtures"

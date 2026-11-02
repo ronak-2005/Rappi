@@ -3,22 +3,24 @@
 Days are integer offsets from the simulated 'today' (0 = today). Services convert them to dates.
 """
 
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
 
 class Receipt(BaseModel):
     """Stock arriving on a given day (an open PO, a planned order line, or a transfer)."""
+
     day: int
     qty: float
-    remaining_shelf_life_days: Optional[int] = None  # shelf life left on arrival; None = non-perishable
+    remaining_shelf_life_days: int | None = None  # shelf life left on arrival; None = non-perishable
     source: str  # e.g. "PO-1001" or "plan:line1"
     is_new: bool = False  # True = part of the plan being evaluated (waste is attributed to it)
 
 
 class SupplierOffer(BaseModel):
     """Everything about buying one SKU from one supplier."""
+
     supplier_id: str
     supplier_name: str = ""
     active: bool = True
@@ -26,26 +28,27 @@ class SupplierOffer(BaseModel):
     moq: int = 1
     case_pack: int = 1
     lead_time_days: int
-    express_lead_days: Optional[int] = None
+    express_lead_days: int | None = None
     express_premium_per_unit: float = 0.0
     max_qty: int = 1_000_000
-    remaining_shelf_life_days: Optional[int] = None
+    remaining_shelf_life_days: int | None = None
     delivery_weekdays: list[int] = Field(default_factory=lambda: list(range(7)))
     cutoff_hour: int = 14
     fill_rate: float = 1.0
     on_time_rate: float = 1.0
     lead_time_sigma_days: float = 0.0
-    available_qty: Optional[int] = None  # supplier said it can only supply this much more for now (None = no limit)
+    available_qty: int | None = None  # supplier said it can only supply this much more for now (None = no limit)
     availability_note: str = ""
 
 
 class TransferSource(BaseModel):
     """Another dark store that can spare stock after covering its OWN protection interval."""
+
     node_id: str
     surplus: int
     lead_days: int = 1
     cost_per_unit: float = 0.05
-    remaining_shelf_life_days: Optional[int] = None
+    remaining_shelf_life_days: int | None = None
 
 
 class TransferLine(BaseModel):
@@ -55,8 +58,9 @@ class TransferLine(BaseModel):
 
 class DemandAssumption(BaseModel):
     """Demand the plan is built on, when it differs from the forecast (Scenario 3)."""
+
     per_day: float
-    until_day: Optional[int] = None  # exclusive day offset; None = the whole horizon
+    until_day: int | None = None  # exclusive day offset; None = the whole horizon
     reason: str = ""
 
 
@@ -64,7 +68,7 @@ class PlanLine(BaseModel):
     supplier_id: str
     qty: int
     mode: Literal["standard", "express"] = "standard"
-    delivery_day: Optional[int] = None  # None = earliest possible for the mode
+    delivery_day: int | None = None  # None = earliest possible for the mode
 
 
 class Plan(BaseModel):
@@ -101,7 +105,7 @@ class Projection(BaseModel):
     safety_stock: float
     days: list[ProjectionDay]
     lost_units: float  # within the horizon
-    first_stockout_day: Optional[int]
+    first_stockout_day: int | None
     expired_units_new: float  # expired units that came from the plan being evaluated (whole simulation)
     expired_units_total: float
     over_capacity_days: list[int]
@@ -112,6 +116,7 @@ class Projection(BaseModel):
 
 class Requirement(BaseModel):
     """How much we really need, with every term shown so it can be explained."""
+
     arrival_day: int
     review_period_days: int
     horizon_days: int
@@ -130,6 +135,7 @@ class Requirement(BaseModel):
 
 class Option(BaseModel):
     """A candidate plan with its consequences and feasibility, produced by the engine."""
+
     id: str
     kind: str  # do_nothing | as_recommended | standard | express | bridge | two_drops | within_budget | waste_free
     label: str
@@ -155,18 +161,19 @@ class Option(BaseModel):
 
 class DemandSignal(BaseModel):
     """What recent sales say about demand vs the forecast (Scenario 3). Engine facts + a suggested assumption."""
+
     forecast_per_day: float
-    recent_7d_avg: Optional[float]
-    recent_3d_avg: Optional[float]
-    yesterday: Optional[int]
-    ratio_7d: Optional[float]
+    recent_7d_avg: float | None
+    recent_3d_avg: float | None
+    yesterday: int | None
+    ratio_7d: float | None
     elevated_days_last_7: int
     elevated_days_explained_by_promotion: int
     stockout_days_last_7: int
-    promotion: Optional[dict] = None
+    promotion: dict | None = None
     classification: str  # normal | sustained_increase | promotion | one_off_spike | censored_drop | sustained_decrease
     explanation: str
-    suggested_assumption: Optional[DemandAssumption] = None
+    suggested_assumption: DemandAssumption | None = None
 
 
 class Anomaly(BaseModel):

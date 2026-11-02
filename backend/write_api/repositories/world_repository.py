@@ -26,18 +26,21 @@ def insert_world(session: Session, fx: FixtureSpec) -> None:
         session.add(m.StorageZone(node_id=z.node, zone=z.zone, capacity_l=z.capacity_l))
         # other SKUs' occupancy from 30 days back to 60 days ahead
         session.add_all(
-            m.ZoneOccupancy(node_id=z.node, zone=z.zone, day=day(i), used_l=z.other_skus_used_l)
-            for i in range(-30, 60)
+            m.ZoneOccupancy(node_id=z.node, zone=z.zone, day=day(i), used_l=z.other_skus_used_l) for i in range(-30, 60)
         )
 
     session.add_all(m.Sku(**s.model_dump()) for s in w.skus)
 
     for inv in w.inventory:
-        session.add(m.Inventory(
-            node_id=inv.node, sku_id=inv.sku, on_hand=inv.on_hand,
-            last_counted_at=day(-inv.last_counted_days_ago),
-            remaining_shelf_life_days=inv.remaining_shelf_life_days,
-        ))
+        session.add(
+            m.Inventory(
+                node_id=inv.node,
+                sku_id=inv.sku,
+                on_hand=inv.on_hand,
+                last_counted_at=day(-inv.last_counted_days_ago),
+                remaining_shelf_life_days=inv.remaining_shelf_life_days,
+            )
+        )
 
     for f in w.forecasts:
         values = f.daily if f.daily is not None else [f.units_per_day] * f.days
@@ -51,55 +54,104 @@ def insert_world(session: Session, fx: FixtureSpec) -> None:
         n = len(values)
         for i, units in enumerate(values):
             days_ago = n - i  # last element = yesterday
-            session.add(m.SalesHistory(
-                node_id=s.node, sku_id=s.sku, day=day(-days_ago), units=int(units),
-                stocked_out=days_ago in s.stocked_out_days_ago,
-            ))
+            session.add(
+                m.SalesHistory(
+                    node_id=s.node,
+                    sku_id=s.sku,
+                    day=day(-days_ago),
+                    units=int(units),
+                    stocked_out=days_ago in s.stocked_out_days_ago,
+                )
+            )
 
     for s in w.suppliers:
         session.add(m.Supplier(**s.model_dump()))
 
     for t in w.supplier_terms:
         data = t.model_dump(exclude={"supplier", "sku"})
-        session.add(m.SupplierTerm(
-            supplier_id=t.supplier, sku_id=t.sku,
-            express_available=t.express_lead_days is not None, **data,
-        ))
+        session.add(
+            m.SupplierTerm(
+                supplier_id=t.supplier,
+                sku_id=t.sku,
+                express_available=t.express_lead_days is not None,
+                **data,
+            )
+        )
 
     for po in w.open_pos:
-        session.add(m.PurchaseOrder(
-            id=po.id, node_id=po.node, sku_id=po.sku, supplier_id=po.supplier,
-            qty_ordered=po.qty,
-            qty_confirmed=po.qty_confirmed if po.qty_confirmed is not None else (po.qty if po.status == "confirmed" else None),
-            unit_cost=po.unit_cost, mode=po.mode, status=po.status,
-            order_date=day(-po.ordered_days_ago), expected_delivery=day(po.arrives_in_days),
-            remaining_shelf_life_days=po.remaining_shelf_life_days, created_by="system",
-        ))
+        session.add(
+            m.PurchaseOrder(
+                id=po.id,
+                node_id=po.node,
+                sku_id=po.sku,
+                supplier_id=po.supplier,
+                qty_ordered=po.qty,
+                qty_confirmed=po.qty_confirmed
+                if po.qty_confirmed is not None
+                else (po.qty if po.status == "confirmed" else None),
+                unit_cost=po.unit_cost,
+                mode=po.mode,
+                status=po.status,
+                order_date=day(-po.ordered_days_ago),
+                expected_delivery=day(po.arrives_in_days),
+                remaining_shelf_life_days=po.remaining_shelf_life_days,
+                created_by="system",
+            )
+        )
 
     for b in w.budgets:
-        session.add(m.Budget(
-            node_id=b.node, category=b.category, period_start=today,
-            period_end=day(b.period_days), total=b.total, committed=b.committed,
-        ))
+        session.add(
+            m.Budget(
+                node_id=b.node,
+                category=b.category,
+                period_start=today,
+                period_end=day(b.period_days),
+                total=b.total,
+                committed=b.committed,
+            )
+        )
 
     for p in w.promotions:
-        session.add(m.Promotion(
-            node_id=p.node, sku_id=p.sku, start=day(p.starts_in_days), end=day(p.ends_in_days),
-            uplift_pct=p.uplift_pct, description=p.description,
-        ))
+        session.add(
+            m.Promotion(
+                node_id=p.node,
+                sku_id=p.sku,
+                start=day(p.starts_in_days),
+                end=day(p.ends_in_days),
+                uplift_pct=p.uplift_pct,
+                description=p.description,
+            )
+        )
 
     rec = fx.trigger.recommendation
     if rec:
-        session.add(m.Recommendation(
-            id=rec.id, node_id=rec.node, sku_id=rec.sku, qty=rec.qty, supplier_id=rec.supplier,
-            source=rec.source, created_at=today,
-        ))
+        session.add(
+            m.Recommendation(
+                id=rec.id,
+                node_id=rec.node,
+                sku_id=rec.sku,
+                qty=rec.qty,
+                supplier_id=rec.supplier,
+                source=rec.source,
+                created_at=today,
+            )
+        )
 
     ev = fx.trigger.supplier_event
     if ev:
         po = next(p for p in w.open_pos if p.id == ev.po_id)
-        session.add(m.SupplierEvent(id=ev.id, po_id=ev.po_id, supplier_id=po.supplier, node_id=po.node, sku_id=po.sku,
-                                    confirmed_qty=ev.confirmed_qty, message=ev.message, received_on=today))
+        session.add(
+            m.SupplierEvent(
+                id=ev.id,
+                po_id=ev.po_id,
+                supplier_id=po.supplier,
+                node_id=po.node,
+                sku_id=po.sku,
+                confirmed_qty=ev.confirmed_qty,
+                message=ev.message,
+                received_on=today,
+            )
+        )
     al = fx.trigger.demand_alert
     if al:
         session.add(m.DemandAlert(id=al.id, node_id=al.node, sku_id=al.sku, message=al.message, raised_on=today))

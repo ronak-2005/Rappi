@@ -6,8 +6,9 @@ the model are fully inlined (no $ref) because providers differ in what they acce
 """
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, ValidationError
 
@@ -18,11 +19,11 @@ from write_api.clients.read_api_client import ReadApiClient
 @dataclass
 class ToolContext:
     read: ReadApiClient
-    db_file: Optional[str]
+    db_file: str | None
     policy: Policy
     node: str
     sku: str
-    recommendation_id: Optional[str]
+    recommendation_id: str | None
     trigger_type: str = "recommendation"
     trigger_ref: str = ""
 
@@ -36,9 +37,14 @@ class Tool:
     handler: Callable[[Any, ToolContext], dict]
 
     def schema(self) -> dict:
-        return {"type": "function", "function": {
-            "name": self.name, "description": self.description,
-            "parameters": inline_refs(self.args_model.model_json_schema())}}
+        return {
+            "type": "function",
+            "function": {
+                "name": self.name,
+                "description": self.description,
+                "parameters": inline_refs(self.args_model.model_json_schema()),
+            },
+        }
 
 
 def inline_refs(schema: dict) -> dict:
@@ -60,21 +66,26 @@ def inline_refs(schema: dict) -> dict:
 class ToolOutcome:
     ok: bool
     result: dict
-    parsed: Optional[BaseModel] = None
+    parsed: BaseModel | None = None
 
 
-def parse_args(tool: Tool, raw: str) -> tuple[Optional[BaseModel], Optional[dict]]:
+def parse_args(tool: Tool, raw: str) -> tuple[BaseModel | None, dict | None]:
     try:
         data = json.loads(raw) if raw and raw.strip() else {}
     except json.JSONDecodeError as exc:
-        return None, {"error": "arguments are not valid JSON", "detail": str(exc),
-                      "fix": "call the tool again with a single valid JSON object"}
+        return None, {
+            "error": "arguments are not valid JSON",
+            "detail": str(exc),
+            "fix": "call the tool again with a single valid JSON object",
+        }
     try:
         return tool.args_model.model_validate(data), None
     except ValidationError as exc:
-        return None, {"error": "arguments do not match the tool schema",
-                      "problems": [{"field": ".".join(map(str, e["loc"])), "issue": e["msg"]} for e in exc.errors()],
-                      "fix": "correct these fields and call the tool again"}
+        return None, {
+            "error": "arguments do not match the tool schema",
+            "problems": [{"field": ".".join(map(str, e["loc"])), "issue": e["msg"]} for e in exc.errors()],
+            "fix": "correct these fields and call the tool again",
+        }
 
 
 def run(tool: Tool, raw_args: str, ctx: ToolContext) -> ToolOutcome:

@@ -5,19 +5,12 @@ import { useState } from 'react'
 import type { TraceStep } from '../../types/api'
 import { Badge } from '../common/Badge'
 import { Json } from '../common/Json'
+import { capitalize, humanize, TOOL_WORDS } from '../../format'
 
 type Key = 'investigate' | 'replan' | 'decide' | 'check' | 'approval' | 'act' | 'verify' | 'outcome'
 const TITLES: Record<Key, string> = {
   investigate: 'Investigated', replan: 'Re-planned', decide: 'Decided', check: 'Checked the rules',
   approval: 'Asked a buyer', act: 'Placed orders', verify: 'Checked the result', outcome: 'Finished',
-}
-export const TOOL_WORDS: Record<string, string> = {
-  get_situation: 'the situation', get_sku_profile: 'product details', get_inventory: 'stock on hand',
-  get_open_pos: 'orders already on the way', get_sales_history: 'sales history', get_forecast: 'the forecast',
-  get_promotions: 'promotions', get_supplier_terms: 'supplier terms', get_supplier_performance: 'supplier reliability',
-  get_budget: 'the budget', get_storage_status: 'storage space', get_other_nodes_stock: 'other stores’ stock',
-  check_data_quality: 'data quality', analyze_demand: 'demand vs forecast', compute_requirement: 'the real need',
-  project_inventory: 'a stock projection', generate_options: 'the buying options', validate_plan: 'a rule check (dry run)',
 }
 
 interface Phase { key: Key; steps: TraceStep[] }
@@ -67,7 +60,7 @@ function summary(p: Phase): { text: string; status?: string } {
       const gates = s.filter((x) => x.kind === 'gate' && !x.payload.passed)
       const back = gates.length ? ` The evidence check sent it back ${gates.length} time(s) first.` : ''
       const said = (d?.payload.summary ?? '').replace(/^(accept|modify|reject|investigate|escalate)\s*:?\s*/i, '')
-      return { text: `${said ? cap(said) : 'Submitted a decision.'}${back}`, status: d?.name }
+      return { text: `${said ? capitalize(said) : 'Submitted a decision.'}${back}`, status: d?.name }
     }
     case 'check': {
       const v = s[s.length - 1].payload
@@ -78,7 +71,7 @@ function summary(p: Phase): { text: string; status?: string } {
     }
     case 'approval': {
       const last = s[s.length - 1]
-      return { text: last.name === 'requested' ? `Waiting: ${(last.payload.reasons ?? []).join('; ')}` : `${cap(last.name)} by ${last.payload.by ?? 'a buyer'}.`, status: last.name === 'requested' ? 'pending' : last.name }
+      return { text: last.name === 'requested' ? `Waiting: ${(last.payload.reasons ?? []).join('; ')}` : `${capitalize(last.name)} by ${last.payload.by ?? 'a buyer'}.`, status: last.name === 'requested' ? 'pending' : last.name }
     }
     case 'act': {
       const a = s.find((x) => x.kind === 'action')?.payload
@@ -99,14 +92,13 @@ function summary(p: Phase): { text: string; status?: string } {
   }
 }
 
-const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1)
-const names = (rs: { rule: string }[]) => rs.map((r) => r.rule.replaceAll('_', ' ')).join(', ') || '—'
+const names = (rs: { rule: string }[]) => rs.map((r) => humanize(r.rule)).join(', ') || '—'
 
 function stepLabel(s: TraceStep): string {
-  if (s.kind === 'tool_call') return `${TOOL_WORDS[s.name] ? cap(TOOL_WORDS[s.name]) : s.name}${s.payload.ok ? '' : ' (error)'}`
+  if (s.kind === 'tool_call') return `${TOOL_WORDS[s.name] ? capitalize(TOOL_WORDS[s.name]) : s.name}${s.payload.ok ? '' : ' (error)'}`
   if (s.kind === 'llm_message') return `Model note: ${(s.payload.text || '').slice(0, 140)}`
   if (s.kind === 'gate') return s.payload.passed ? 'Evidence check passed' : `Evidence check: ${s.payload.error}`
-  return `${cap(s.kind)}: ${s.name.replaceAll('_', ' ')}`
+  return `${capitalize(s.kind)}: ${humanize(s.name)}`
 }
 
 export function TraceTimeline({ steps }: { steps: TraceStep[] }) {

@@ -1,6 +1,6 @@
 """INSERT/UPDATE for agent runs, trace steps and approvals."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlmodel import Session, func, select
@@ -9,7 +9,7 @@ from shared.db import models as m
 
 
 def now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def create_run(session: Session, **fields) -> m.AgentRun:
@@ -34,7 +34,9 @@ def update_run(session: Session, run: m.AgentRun, **fields) -> m.AgentRun:
 
 
 def add_step(session: Session, run_id: str, state: str, kind: str, name: str, payload: dict[str, Any]) -> m.TraceStep:
-    seq = session.exec(select(func.coalesce(func.max(m.TraceStep.seq), -1)).where(m.TraceStep.run_id == run_id)).one() + 1
+    seq = (
+        session.exec(select(func.coalesce(func.max(m.TraceStep.seq), -1)).where(m.TraceStep.run_id == run_id)).one() + 1
+    )
     step = m.TraceStep(run_id=run_id, seq=seq, at=now(), state=state, kind=kind, name=name, payload=payload)
     session.add(step)
     session.commit()
@@ -43,7 +45,7 @@ def add_step(session: Session, run_id: str, state: str, kind: str, name: str, pa
 
 
 def steps(session: Session, run_id: str) -> list[m.TraceStep]:
-    return list(session.exec(select(m.TraceStep).where(m.TraceStep.run_id == run_id).order_by(m.TraceStep.seq)).all())
+    return session.exec(select(m.TraceStep).where(m.TraceStep.run_id == run_id).order_by(m.TraceStep.seq)).all()
 
 
 def create_approval(session: Session, approval_id: str, run_id: str, reasons: list[str], plan: dict) -> m.Approval:

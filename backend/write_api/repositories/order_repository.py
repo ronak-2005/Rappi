@@ -1,6 +1,6 @@
 """INSERT/UPDATE for purchase orders, their events and budget commitments."""
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 from sqlmodel import Session, select
 
@@ -8,7 +8,7 @@ from shared.db import models as m
 
 
 def now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def by_idempotency_key(session: Session, key: str) -> m.PurchaseOrder | None:
@@ -20,17 +20,18 @@ def next_po_id(session: Session) -> str:
     return f"PO-A{n + 1:03d}"
 
 
-def find_identical_open(session: Session, node: str, sku: str, supplier: str, qty: int, delivery: date,
-                        exclude_key: str | None = None) -> m.PurchaseOrder | None:
+def find_identical_open(
+    session: Session, node: str, sku: str, supplier: str, qty: int, delivery: date
+) -> m.PurchaseOrder | None:
     q = select(m.PurchaseOrder).where(
-        m.PurchaseOrder.node_id == node, m.PurchaseOrder.sku_id == sku, m.PurchaseOrder.supplier_id == supplier,
-        m.PurchaseOrder.qty_ordered == qty, m.PurchaseOrder.expected_delivery == delivery,
+        m.PurchaseOrder.node_id == node,
+        m.PurchaseOrder.sku_id == sku,
+        m.PurchaseOrder.supplier_id == supplier,
+        m.PurchaseOrder.qty_ordered == qty,
+        m.PurchaseOrder.expected_delivery == delivery,
         m.PurchaseOrder.status.in_(("draft", "sent", "confirmed", "partially_confirmed")),
     )
-    po = session.exec(q).first()
-    if po and exclude_key and po.idempotency_key == exclude_key:
-        return None
-    return po
+    return session.exec(q).first()
 
 
 def create_po(session: Session, **fields) -> m.PurchaseOrder:
@@ -56,9 +57,14 @@ def add_event(session: Session, po_id: str, type_: str, payload: dict) -> None:
 
 
 def commit_budget(session: Session, node: str, category: str, today: date, amount: float) -> None:
-    b = session.exec(select(m.Budget).where(
-        m.Budget.node_id == node, m.Budget.category == category,
-        m.Budget.period_start <= today, m.Budget.period_end >= today)).first()
+    b = session.exec(
+        select(m.Budget).where(
+            m.Budget.node_id == node,
+            m.Budget.category == category,
+            m.Budget.period_start <= today,
+            m.Budget.period_end >= today,
+        )
+    ).first()
     if b is not None:
         b.committed = round(b.committed + amount, 2)
         session.add(b)
@@ -77,11 +83,20 @@ def transfer(session: Session, transfer_id: str) -> m.Transfer | None:
     return session.get(m.Transfer, transfer_id)
 
 
-def create_transfer(session: Session, *, transfer_id: str, from_node: str, to_node: str, sku: str, qty: int,
-                    eta: date, run_id: str) -> m.Transfer:
+def create_transfer(
+    session: Session, *, transfer_id: str, from_node: str, to_node: str, sku: str, qty: int, eta: date, run_id: str
+) -> m.Transfer:
     """Book a transfer and take the stock out of the source store (it is picked now)."""
-    t = m.Transfer(id=transfer_id, from_node=from_node, to_node=to_node, sku_id=sku, qty=qty, eta=eta,
-                   status="in_transit", run_id=run_id)
+    t = m.Transfer(
+        id=transfer_id,
+        from_node=from_node,
+        to_node=to_node,
+        sku_id=sku,
+        qty=qty,
+        eta=eta,
+        status="in_transit",
+        run_id=run_id,
+    )
     inv = session.exec(select(m.Inventory).where(m.Inventory.node_id == from_node, m.Inventory.sku_id == sku)).first()
     inv.on_hand -= qty
     session.add(t)

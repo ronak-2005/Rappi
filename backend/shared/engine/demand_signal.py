@@ -11,15 +11,12 @@ then a classification and a suggested demand assumption. The agent decides; the 
   normal              nothing unusual
 """
 
-from typing import Optional
-
 from shared.domain.planning import DemandAssumption, DemandSignal
 
 ELEVATED = 1.25  # a day is "elevated" if sales > 25% above the forecast level
 
 
-def analyze(*, forecast_per_day: float, sales: list[tuple[int, int, bool]],
-            promotions: list[dict]) -> DemandSignal:
+def analyze(*, forecast_per_day: float, sales: list[tuple[int, int, bool]], promotions: list[dict]) -> DemandSignal:
     """sales: (days_ago, units, stocked_out). promotions: {start_offset, end_offset, uplift_pct, description}
     with offsets relative to today (negative = past)."""
     by_ago = {d: (u, out) for d, u, out in sales}
@@ -37,25 +34,32 @@ def analyze(*, forecast_per_day: float, sales: list[tuple[int, int, bool]],
     promo = in_promo(elevated[0]) if explained else next((p for p in promotions if p["end_offset"] >= 0), None)
     ratio = round(avg7 / forecast_per_day, 2) if avg7 and forecast_per_day else None
 
-    suggestion: Optional[DemandAssumption] = None
+    suggestion: DemandAssumption | None = None
     if len(elevated) >= 3 and len(explained) >= 0.8 * len(elevated):
         cls = "promotion"
         end = promo["end_offset"]
         promo_level = sum(by_ago[d][0] for d in explained) / len(explained)
         if end >= 0:
-            suggestion = DemandAssumption(per_day=round(promo_level, 1), until_day=end + 1,
-                                          reason=f"promotion uplift until it ends (day {end}), then the forecast")
-        text = (f"{len(elevated)} of the last 7 days were elevated and {len(explained)} of them fall inside the promotion "
-                f"'{promo.get('description', '')}' ending {'today' if end == 0 else f'in {end} day(s)' if end > 0 else f'{-end} day(s) ago'}. "
-                "The increase is temporary.")
+            suggestion = DemandAssumption(
+                per_day=round(promo_level, 1),
+                until_day=end + 1,
+                reason=f"promotion uplift until it ends (day {end}), then the forecast",
+            )
+        text = (
+            f"{len(elevated)} of the last 7 days were elevated and {len(explained)} of them fall inside the promotion "
+            f"'{promo.get('description', '')}' ending {'today' if end == 0 else f'in {end} day(s)' if end > 0 else f'{-end} day(s) ago'}. "
+            "The increase is temporary."
+        )
     elif len(elevated) >= 5:
         cls = "sustained_increase"
         suggestion = DemandAssumption(per_day=round(avg7, 1), reason="sales above forecast on most of the last 7 days")
         text = f"Sales were above forecast on {len(elevated)} of the last 7 days (avg {avg7:.0f} vs {forecast_per_day:.0f}), with no promotion: a real level change."
     elif elevated and len(elevated) <= 2 and 1 in elevated:
         cls = "one_off_spike"
-        text = (f"Only {len(elevated)} elevated day(s) (yesterday: {yesterday}); the rest of the week matches the "
-                "forecast. Looks like a one-off (e.g. a bulk order): keep the forecast.")
+        text = (
+            f"Only {len(elevated)} elevated day(s) (yesterday: {yesterday}); the rest of the week matches the "
+            "forecast. Looks like a one-off (e.g. a bulk order): keep the forecast."
+        )
     elif ratio is not None and ratio < 0.75 and stockouts >= 2:
         cls = "censored_drop"
         text = f"Sales fell below forecast, but the shelf was empty on {stockouts} of the last 7 days: demand was hidden, not lower."
@@ -68,15 +72,22 @@ def analyze(*, forecast_per_day: float, sales: list[tuple[int, int, bool]],
         text = "Recent sales are consistent with the forecast."
 
     return DemandSignal(
-        forecast_per_day=round(forecast_per_day, 1), recent_7d_avg=round(avg7, 1) if avg7 else None,
-        recent_3d_avg=round(avg3, 1) if avg3 else None, yesterday=yesterday, ratio_7d=ratio,
-        elevated_days_last_7=len(elevated), elevated_days_explained_by_promotion=len(explained),
-        stockout_days_last_7=stockouts, promotion=promo, classification=cls, explanation=text,
+        forecast_per_day=round(forecast_per_day, 1),
+        recent_7d_avg=round(avg7, 1) if avg7 else None,
+        recent_3d_avg=round(avg3, 1) if avg3 else None,
+        yesterday=yesterday,
+        ratio_7d=ratio,
+        elevated_days_last_7=len(elevated),
+        elevated_days_explained_by_promotion=len(explained),
+        stockout_days_last_7=stockouts,
+        promotion=promo,
+        classification=cls,
+        explanation=text,
         suggested_assumption=suggestion,
     )
 
 
-def apply_assumption(demand: list[float], assumption: Optional[DemandAssumption]) -> list[float]:
+def apply_assumption(demand: list[float], assumption: DemandAssumption | None) -> list[float]:
     if assumption is None:
         return list(demand)
     end = len(demand) if assumption.until_day is None else min(assumption.until_day, len(demand))

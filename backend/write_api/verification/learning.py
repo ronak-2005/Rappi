@@ -16,6 +16,12 @@ def record(session: Session, execution: ExecutionResult) -> list[dict]:
         on_time = ln.confirmed_delivery is None or ln.confirmed_delivery <= ln.requested_delivery
         s = supplier_repository.update_stats(session, ln.supplier_id, ratio, on_time)
         if s:
-            updates.append({"supplier": s.id, "fill_rate": s.fill_rate, "on_time_rate": s.on_time_rate,
-                            "orders_observed": s.orders_observed})
+            updates.append(
+                {
+                    "supplier": s.id,
+                    "fill_rate": s.fill_rate,
+                    "on_time_rate": s.on_time_rate,
+                    "orders_observed": s.orders_observed,
+                }
+            )
     return updates

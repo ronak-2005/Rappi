@@ -11,7 +11,6 @@ day a + r − buffer (buffer = days before expiry we stop selling).
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 from shared.domain.planning import Projection, ProjectionDay, Receipt
 
@@ -19,14 +18,14 @@ from shared.domain.planning import Projection, ProjectionDay, Receipt
 @dataclass
 class _Lot:
     qty: float
-    writeoff_day: Optional[int]
+    writeoff_day: int | None
     is_new: bool
 
 
 def project(
     *,
     on_hand: float,
-    on_hand_remaining_shelf_life_days: Optional[int],
+    on_hand_remaining_shelf_life_days: int | None,
     demand: list[float],
     receipts: list[Receipt],
     unit_volume_l: float,
@@ -85,13 +84,23 @@ def project(
         sold = demand[d] - remaining
         close = available - sold
 
-        days.append(ProjectionDay(
-            day=d, open=round(open_, 2), receipts=round(received, 2), expired=round(expired, 2),
-            available=round(available, 2), demand=round(demand[d], 2), sold=round(sold, 2),
-            lost=round(remaining, 2), close=round(close, 2), volume_l=round(volume, 2), free_l=round(free, 2),
-            over_capacity=volume > free + 1e-6,
-            below_ss=d < horizon_days and d >= check_ss_from_day and close < safety_stock - 1e-6,
-        ))
+        days.append(
+            ProjectionDay(
+                day=d,
+                open=round(open_, 2),
+                receipts=round(received, 2),
+                expired=round(expired, 2),
+                available=round(available, 2),
+                demand=round(demand[d], 2),
+                sold=round(sold, 2),
+                lost=round(remaining, 2),
+                close=round(close, 2),
+                volume_l=round(volume, 2),
+                free_l=round(free, 2),
+                over_capacity=volume > free + 1e-6,
+                below_ss=d < horizon_days and d >= check_ss_from_day and close < safety_stock - 1e-6,
+            )
+        )
 
     in_h = [x for x in days if x.day < horizon_days]
     stockouts = [x.day for x in in_h if x.lost > 1e-6]

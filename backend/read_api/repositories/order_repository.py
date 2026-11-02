@@ -7,8 +7,13 @@ from shared.db import models as m
 OPEN = ("draft", "pending_approval", "sent", "confirmed", "partially_confirmed")
 
 
-def purchase_orders(session: Session, node_id: str | None = None, sku_id: str | None = None,
-                    only_open: bool = False, run_id: str | None = None) -> list[m.PurchaseOrder]:
+def purchase_orders(
+    session: Session,
+    node_id: str | None = None,
+    sku_id: str | None = None,
+    only_open: bool = False,
+    run_id: str | None = None,
+) -> list[m.PurchaseOrder]:
     q = select(m.PurchaseOrder)
     if node_id:
         q = q.where(m.PurchaseOrder.node_id == node_id)
@@ -18,15 +23,11 @@ def purchase_orders(session: Session, node_id: str | None = None, sku_id: str | 
         q = q.where(m.PurchaseOrder.status.in_(OPEN))
     if run_id:
         q = q.where(m.PurchaseOrder.run_id == run_id)
-    return list(session.exec(q.order_by(m.PurchaseOrder.expected_delivery)).all())
-
-
-def purchase_order(session: Session, po_id: str) -> m.PurchaseOrder | None:
-    return session.get(m.PurchaseOrder, po_id)
+    return session.exec(q.order_by(m.PurchaseOrder.expected_delivery)).all()
 
 
 def po_events(session: Session, po_id: str) -> list[m.POEvent]:
-    return list(session.exec(select(m.POEvent).where(m.POEvent.po_id == po_id).order_by(m.POEvent.at)).all())
+    return session.exec(select(m.POEvent).where(m.POEvent.po_id == po_id).order_by(m.POEvent.at)).all()
 
 
 def transfers(session: Session, sku_id: str | None = None, run_id: str | None = None) -> list[m.Transfer]:
@@ -35,4 +36,4 @@ def transfers(session: Session, sku_id: str | None = None, run_id: str | None = 
         q = q.where(m.Transfer.sku_id == sku_id)
     if run_id:
         q = q.where(m.Transfer.run_id == run_id)
-    return list(session.exec(q).all())
+    return session.exec(q).all()

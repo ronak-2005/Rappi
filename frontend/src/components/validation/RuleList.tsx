@@ -1,5 +1,6 @@
 // The rulebook's verdict. Problems first; passing rules collapse into one line.
 import { useState } from 'react'
+import { humanize } from '../../format'
 
 interface Rule { rule: string; kind: string; passed: boolean; message: string }
 
@@ -10,7 +11,7 @@ export function RuleList({ results }: { results: Rule[] }) {
   const row = (r: Rule) => (
     <li key={r.rule}>
       <span className={`mark ${r.passed ? 'pass' : r.kind === 'hard' ? 'fail' : 'ask'}`} aria-hidden>{r.passed ? '✓' : r.kind === 'hard' ? '✕' : '!'}</span>
-      <span>{r.rule.replaceAll('_', ' ')}<br /><span className="kind">{r.kind === 'hard' ? 'hard rule' : 'needs approval if broken'}</span></span>
+      <span>{humanize(r.rule)}<br /><span className="kind">{r.kind === 'hard' ? 'hard rule' : 'needs approval if broken'}</span></span>
       <span className="muted">{r.passed ? r.message : `${r.kind === 'hard' ? 'Blocked' : 'Needs approval'}: ${r.message}`}</span>
     </li>
   )

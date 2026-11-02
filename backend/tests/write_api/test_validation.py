@@ -57,11 +57,23 @@ def test_reject_with_stockout_needs_approval(world, db_file):
 def test_duplicate_po_is_hard(world, db_file):
     world("s1_reject_overstock")  # PO-2001: 1200 from SUP_A arriving day 1
     from datetime import date
+
     from shared.db import models as m
+
     with read_write(db_file) as s:  # an identical open PO for day 3
-        s.add(m.PurchaseOrder(id="PO-X", node_id="CHAP", sku_id="MILK1L", supplier_id="SUP_A", qty_ordered=500,
-                              unit_cost=1.2, status="sent", order_date=date(2026, 11, 2),
-                              expected_delivery=date(2026, 11, 5)))
+        s.add(
+            m.PurchaseOrder(
+                id="PO-X",
+                node_id="CHAP",
+                sku_id="MILK1L",
+                supplier_id="SUP_A",
+                qty_ordered=500,
+                unit_cost=1.2,
+                status="sent",
+                order_date=date(2026, 11, 2),
+                expected_delivery=date(2026, 11, 5),
+            )
+        )
         s.commit()
     r = run(db_file, [PlanLine(supplier_id="SUP_A", qty=500)], rec="REC-102")
     assert "no_duplicate_po" in names(r.hard_failures)
@@ -69,18 +81,36 @@ def test_duplicate_po_is_hard(world, db_file):
 
 def test_forecast_override_needs_evidence(world, db_file):
     from shared.domain.planning import DemandAssumption
+
     world("s3_sustained_spike")
     with read_write(db_file) as s:
-        ok = validate(s, POLICY, "CHAP", "MILK1L", [PlanLine(supplier_id="SUP_A", qty=1160)], None, [],
-                      DemandAssumption(per_day=180))
-        inflated = validate(s, POLICY, "CHAP", "MILK1L", [PlanLine(supplier_id="SUP_A", qty=1660)], None, [],
-                            DemandAssumption(per_day=230))
+        ok = validate(
+            s,
+            POLICY,
+            "CHAP",
+            "MILK1L",
+            [PlanLine(supplier_id="SUP_A", qty=1160)],
+            None,
+            [],
+            DemandAssumption(per_day=180),
+        )
+        inflated = validate(
+            s,
+            POLICY,
+            "CHAP",
+            "MILK1L",
+            [PlanLine(supplier_id="SUP_A", qty=1660)],
+            None,
+            [],
+            DemandAssumption(per_day=230),
+        )
     assert ok.passed and not ok.requires_approval
     assert "forecast_override" in names(inflated.soft_violations)  # 230/day > 180 × 1.1 → a human must agree
 
 
 def test_transfer_beyond_surplus_is_hard(world, db_file):
     from shared.domain.planning import TransferLine
+
     world("s2_transfer_from_node")
     with read_write(db_file) as s:
         r = validate(s, POLICY, "CHAP", "MILK1L", [], None, [TransferLine(from_node="USAQ", qty=1500)])

@@ -4,8 +4,7 @@ import { readApi } from '../api/read'
 import { Badge } from '../components/common/Badge'
 import { ErrorBox } from '../components/common/ErrorBox'
 import type { PurchaseOrder } from '../types/api'
-
-const day = (iso: string) => new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+import { shortDay } from '../format'
 
 export function PurchaseOrders() {
   const [pos, setPos] = useState<PurchaseOrder[] | null>(null)
@@ -23,7 +22,7 @@ export function PurchaseOrders() {
           <tbody>{pos.map((p) => (
             <tr key={p.id}>
               <td>{p.id}</td><td>{p.node_id}</td><td>{p.sku_id}</td><td>{p.supplier_id}</td>
-              <td className="num">{p.qty_ordered}</td><td className="num">{p.qty_confirmed ?? '—'}</td><td>{day(p.expected_delivery)}</td>
+              <td className="num">{p.qty_ordered}</td><td className="num">{p.qty_confirmed ?? '—'}</td><td>{shortDay(p.expected_delivery)}</td>
               <td>{p.run_id ? <a href={`#/runs/${p.run_id}`}>Agent</a> : 'Existing'}</td>
               <td><Badge value={p.status} /></td>
             </tr>))}</tbody>

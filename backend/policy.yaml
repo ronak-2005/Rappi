@@ -3,8 +3,6 @@
 
 planning:
   service_level_z: 1.65          # ~95% cycle service level
-  default_review_period_days: 7
-  accept_tolerance_pct: 5        # recommendation within ±5% of our computed quantity → "accept"
   shelf_life_sell_buffer_days: 1 # a unit must sell at least this many days before it expires
 
 costs:

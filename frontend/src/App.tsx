@@ -5,6 +5,7 @@ import { Evals } from './pages/Evals'
 import { PurchaseOrders } from './pages/PurchaseOrders'
 import { RunView } from './pages/RunView'
 import { ScenarioLauncher } from './pages/ScenarioLauncher'
+import { longDay } from './format'
 
 function useHash() {
   const [hash, setHash] = useState(window.location.hash || '#/')
@@ -21,12 +22,12 @@ export default function App() {
   const [world, setWorld] = useState('')
   useEffect(() => {
     readApi.world()
-      .then((w) => setWorld(`Store data as of ${new Date(w.today + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}`))
+      .then((w) => setWorld(`Store data as of ${longDay(w.today)}`))
       .catch(() => setWorld('No situation loaded yet'))
   }, [hash])
 
   const runMatch = hash.match(/^#\/runs\/(.+)$/)
-  const page = runMatch ? <RunView runId={runMatch[1]} />
+  const page = runMatch ? <RunView key={runMatch[1]} runId={runMatch[1]} />
     : hash === '#/orders' ? <PurchaseOrders />
     : hash === '#/evals' ? <Evals />
     : <ScenarioLauncher go={go} />

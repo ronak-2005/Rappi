@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.6", "vulture>=2.11"]
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -30,3 +30,14 @@ pythonpath = ["."]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["F", "E", "W", "B", "SIM", "UP", "RET", "PIE", "C4", "I"]
+ignore = ["B008", "E501"]  # B008: FastAPI Depends(...) pattern; E501: the formatter owns line width, long prose strings stay whole
+
+[tool.ruff.lint.isort]
+known-first-party = ["shared", "read_api", "write_api", "mock_supplier", "evals", "tests"]

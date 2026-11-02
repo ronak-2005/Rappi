@@ -5,10 +5,10 @@ read_write() → used by write_api only.
 WAL journal mode lets readers and the single writer work at the same time.
 """
 
+from collections.abc import Iterator
 from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
-from typing import Iterator
 
 from sqlalchemy import event
 from sqlalchemy.engine import Engine

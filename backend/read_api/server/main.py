@@ -4,12 +4,11 @@ Run: uvicorn read_api.server.main:app --port 8001
 """
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
 from read_api.controllers import evals, facts, planning, runs, world
 from read_api.server.health import router as health_router
 from shared.config.settings import get_settings
-from shared.observability.http import install_error_handlers, install_request_context
+from shared.observability.http import install_common
 from shared.observability.logging import setup_logging
 
 SERVICE = "read_api"
@@ -17,13 +16,13 @@ SERVICE = "read_api"
 
 def create_app(db_file: str | None = None) -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="Purchasing Agent — Read API", version="0.1.0",
-                  description="Queries only. The database connection is read-only.")
+    app = FastAPI(
+        title="Purchasing Agent — Read API",
+        version="0.1.0",
+        description="Queries only. The database connection is read-only.",
+    )
     app.state.db_file = db_file
-    app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins.split(","), allow_methods=["*"],
-                       allow_headers=["*"])
-    install_request_context(app)
-    install_error_handlers(app, SERVICE)
+    install_common(app, SERVICE, settings.cors_origins)
     for r in (health_router, world.router, facts.router, planning.router, runs.router, evals.router):
         app.include_router(r)
     return app

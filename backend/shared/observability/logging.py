@@ -5,7 +5,7 @@ import json
 import logging
 import sys
 from contextvars import ContextVar
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 run_id_var: ContextVar[str] = ContextVar("run_id", default="")
 request_id_var: ContextVar[str] = ContextVar("request_id", default="")
@@ -19,7 +19,7 @@ class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         parts = record.name.split(".")
         entry = {
-            "at": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+            "at": datetime.now(UTC).isoformat(timespec="milliseconds"),
             "level": record.levelname,
             "service": self.service,
             "component": ".".join(parts[:3]),

@@ -58,8 +58,10 @@ def test_supplier_event_webhook_runs_agent(apis):
     read, write = apis
     write.post("/fixtures/s2_alt_supplier/load")
     # a second shortfall on the new world: the existing PO is now fully refused
-    r = write.post("/supplier-events", json={"po_id": "PO-3001", "confirmed_qty": 0,
-                                            "message": "Cancelled: plant shutdown.", "llm_mode": "baseline"}).json()
+    r = write.post(
+        "/supplier-events",
+        json={"po_id": "PO-3001", "confirmed_qty": 0, "message": "Cancelled: plant shutdown.", "llm_mode": "baseline"},
+    ).json()
     assert r["applied"]
     pos = {p["id"]: p for p in read.get("/purchase-orders").json()}
     assert pos["PO-3001"]["status"] == "rejected"

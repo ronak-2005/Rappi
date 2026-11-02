@@ -1,4 +1,5 @@
 // Keeps a run's trace + detail up to date: SSE for live steps, plus a refetch after each run event.
+// The run page is keyed by run id, so a new run gets fresh state (no reset needed here).
 import { useCallback, useEffect, useState } from 'react'
 import { readApi } from '../api/read'
 import { streamRun } from '../api/stream'
@@ -20,8 +21,7 @@ export function useRunStream(runId: string) {
   }, [runId])
 
   useEffect(() => {
-    setSteps([])
-    setRun(null)
+    // oxlint-disable-next-line react/set-state-in-effect -- network fetch: state is set when the request resolves
     refresh()
     const stop = streamRun(
       runId,

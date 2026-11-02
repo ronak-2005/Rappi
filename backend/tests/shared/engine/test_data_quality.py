@@ -6,8 +6,15 @@ SALES = [(d, 100, False) for d in range(1, 15)]
 
 
 def codes(**kw):
-    base = dict(on_hand=300, last_counted_days_ago=1, sales=SALES, receipts_last_days=0,
-                forecast_next_7_avg=100, stale_count_days=7, forecast_vs_sales_ratio_max=1.5)
+    base = {
+        "on_hand": 300,
+        "last_counted_days_ago": 1,
+        "sales": SALES,
+        "receipts_last_days": 0,
+        "forecast_next_7_avg": 100,
+        "stale_count_days": 7,
+        "forecast_vs_sales_ratio_max": 1.5,
+    }
     base.update(kw)
     return {a.code for a in check(**base)}
 

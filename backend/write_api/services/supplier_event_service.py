@@ -19,13 +19,19 @@ def apply(session: Session, event_id: str, unavailable_days: int = 14) -> m.Supp
     po = session.get(m.PurchaseOrder, ev.po_id)
     if po is None:
         raise NotFoundError("purchase_order", ev.po_id, "write_api.services.supplier_event_service")
-    status = "rejected" if ev.confirmed_qty == 0 else ("partially_confirmed" if ev.confirmed_qty < po.qty_ordered else "confirmed")
+    status = (
+        "rejected"
+        if ev.confirmed_qty == 0
+        else ("partially_confirmed" if ev.confirmed_qty < po.qty_ordered else "confirmed")
+    )
     order_repository.update_po(session, po, qty_confirmed=ev.confirmed_qty, status=status, notes=ev.message)
-    order_repository.add_event(session, po.id, status, {"supplier_event": ev.id, "message": ev.message,
-                                                        "confirmed_qty": ev.confirmed_qty})
+    order_repository.add_event(
+        session, po.id, status, {"supplier_event": ev.id, "message": ev.message, "confirmed_qty": ev.confirmed_qty}
+    )
     if ev.confirmed_qty < po.qty_ordered:
-        availability_repository.record_unavailable(session, ev.supplier_id, ev.sku_id, snapshot.world(session).today,
-                                                   unavailable_days, ev.message)
+        availability_repository.record_unavailable(
+            session, ev.supplier_id, ev.sku_id, snapshot.world(session).today, unavailable_days, ev.message
+        )
     return ev
 
 
@@ -34,8 +40,16 @@ def create(session: Session, *, event_id: str, po_id: str, confirmed_qty: int, m
     po = session.get(m.PurchaseOrder, po_id)
     if po is None:
         raise NotFoundError("purchase_order", po_id, "write_api.services.supplier_event_service")
-    ev = m.SupplierEvent(id=event_id, po_id=po_id, supplier_id=po.supplier_id, node_id=po.node_id, sku_id=po.sku_id,
-                         confirmed_qty=confirmed_qty, message=message, received_on=snapshot.world(session).today)
+    ev = m.SupplierEvent(
+        id=event_id,
+        po_id=po_id,
+        supplier_id=po.supplier_id,
+        node_id=po.node_id,
+        sku_id=po.sku_id,
+        confirmed_qty=confirmed_qty,
+        message=message,
+        received_on=snapshot.world(session).today,
+    )
     session.add(ev)
     session.commit()
     return ev

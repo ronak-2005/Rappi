@@ -14,7 +14,9 @@ def load_world(fixture_id: str, db_file: str | None = None, supplier: SupplierCl
         world_repository.reset_database(session)
         world_repository.insert_world(session, fx)
         if fx.trigger.supplier_event:  # the supplier's message "arrives" when the world is loaded
-            supplier_event_service.apply(session, fx.trigger.supplier_event.id, fx.trigger.supplier_event.unavailable_days)
+            supplier_event_service.apply(
+                session, fx.trigger.supplier_event.id, fx.trigger.supplier_event.unavailable_days
+            )
     if supplier is not None:
         supplier.set_scenario({k: v.model_dump() for k, v in fx.supplier_behaviour.items()})
     return fx

@@ -17,4 +17,5 @@ def supplier():
 def world(db_file, supplier):
     def _load(fixture_id: str):
         return load_world(fixture_id, db_file, supplier)
+
     return _load

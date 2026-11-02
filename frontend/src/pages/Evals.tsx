@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { readApi } from '../api/read'
 import { ErrorBox } from '../components/common/ErrorBox'
+import { humanize } from '../format'
 
 const pct = (x: number | null | undefined) => (x == null ? '—' : `${Math.round(x * 100)}%`)
 
@@ -29,7 +30,7 @@ export function Evals() {
                 const c = f.by_brain?.[b]
                 return <td key={b}>{c ? <><span className={`status ${c.all_checks_pass_rate === 1 ? 'ok' : 'bad'}`}>
                   {c.all_checks_pass_rate === 1 ? 'Passed' : 'Failed'}</span>
-                  {c.failed_checks?.length ? <div className="small muted">{c.failed_checks.join(', ').replaceAll('_', ' ')}</div> : null}</> : '—'}</td>
+                  {c.failed_checks?.length ? <div className="small muted">{humanize(c.failed_checks.join(', '))}</div> : null}</> : '—'}</td>
               })}</tr>))}</tbody>
           </table></div>
           <section className="section" style={{ marginTop: 24 }}>
@@ -37,7 +38,7 @@ export function Evals() {
             <div className="table-wrap"><table>
               <thead><tr><th>Check</th><th>Area</th>{brains.map((b) => <th key={b} className="num">{b === 'baseline' ? 'Rules only' : b}</th>)}</tr></thead>
               <tbody>{(report.checks ?? []).map((c: any) => (
-                <tr key={c.name}><td>{c.name.replaceAll('_', ' ')}</td><td className="muted">{c.group}</td>
+                <tr key={c.name}><td>{humanize(c.name)}</td><td className="muted">{c.group}</td>
                   {brains.map((b) => <td key={b} className="num">{pct(c.by_brain?.[b])}</td>)}</tr>))}</tbody>
             </table></div>
           </section>

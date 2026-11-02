@@ -4,7 +4,6 @@ so a lost response can never create a second order."""
 import logging
 from dataclasses import dataclass
 from datetime import date
-from typing import Optional
 
 import httpx
 
@@ -14,7 +13,7 @@ log = logging.getLogger("write_api.clients.supplier_client")
 @dataclass
 class SupplierReply:
     ok: bool
-    data: Optional[dict]
+    data: dict | None
     attempts: int
     replayed: bool
     error: str = ""
@@ -31,10 +30,28 @@ class SupplierClient:
         self.http = http
         self.max_attempts = max_attempts
 
-    def place_order(self, *, idempotency_key: str, po_id: str, supplier_id: str, sku_id: str, qty: int,
-                    unit_cost: float, requested_delivery: date, mode: str) -> SupplierReply:
-        body = {"idempotency_key": idempotency_key, "po_id": po_id, "supplier_id": supplier_id, "sku_id": sku_id,
-                "qty": qty, "unit_cost": unit_cost, "requested_delivery": requested_delivery.isoformat(), "mode": mode}
+    def place_order(
+        self,
+        *,
+        idempotency_key: str,
+        po_id: str,
+        supplier_id: str,
+        sku_id: str,
+        qty: int,
+        unit_cost: float,
+        requested_delivery: date,
+        mode: str,
+    ) -> SupplierReply:
+        body = {
+            "idempotency_key": idempotency_key,
+            "po_id": po_id,
+            "supplier_id": supplier_id,
+            "sku_id": sku_id,
+            "qty": qty,
+            "unit_cost": unit_cost,
+            "requested_delivery": requested_delivery.isoformat(),
+            "mode": mode,
+        }
         error = ""
         for attempt in range(1, self.max_attempts + 1):
             try:
@@ -45,7 +62,9 @@ class SupplierClient:
                 continue
             if r.status_code >= 500:
                 error = f"HTTP {r.status_code}"
-                log.warning("supplier %s attempt %d: %s, retrying with same idempotency key", supplier_id, attempt, error)
+                log.warning(
+                    "supplier %s attempt %d: %s, retrying with same idempotency key", supplier_id, attempt, error
+                )
                 continue
             if r.status_code >= 400:
                 return SupplierReply(False, None, attempt, False, f"HTTP {r.status_code}: {r.text[:200]}")

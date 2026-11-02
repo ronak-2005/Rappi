@@ -1,7 +1,7 @@
 """What every rule receives and returns. A rule is a function RuleInput → RuleResult."""
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable, Optional
 
 from shared.config.policy import Policy
 from shared.domain.decision import RuleResult
@@ -17,8 +17,8 @@ class RuleInput:
     policy: Policy
     duplicate_po_ids: list[str] = field(default_factory=list)
     transfers: list[TransferLine] = field(default_factory=list)
-    demand: Optional[DemandAssumption] = None  # the agent's demand assumption, if it overrode the forecast
-    demand_signal: Optional[DemandSignal] = None
+    demand: DemandAssumption | None = None  # the agent's demand assumption, if it overrode the forecast
+    demand_signal: DemandSignal | None = None
 
 
 Rule = Callable[[RuleInput], RuleResult]

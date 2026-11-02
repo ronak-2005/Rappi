@@ -6,7 +6,7 @@ from shared.db import models as m
 
 
 def runs(session: Session, limit: int = 50) -> list[m.AgentRun]:
-    return list(session.exec(select(m.AgentRun).order_by(m.AgentRun.started_at.desc()).limit(limit)).all())
+    return session.exec(select(m.AgentRun).order_by(m.AgentRun.started_at.desc()).limit(limit)).all()
 
 
 def run(session: Session, run_id: str) -> m.AgentRun | None:
@@ -14,8 +14,9 @@ def run(session: Session, run_id: str) -> m.AgentRun | None:
 
 
 def trace(session: Session, run_id: str, after_seq: int = -1) -> list[m.TraceStep]:
-    return list(session.exec(select(m.TraceStep).where(
-        m.TraceStep.run_id == run_id, m.TraceStep.seq > after_seq).order_by(m.TraceStep.seq)).all())
+    return session.exec(
+        select(m.TraceStep).where(m.TraceStep.run_id == run_id, m.TraceStep.seq > after_seq).order_by(m.TraceStep.seq)
+    ).all()
 
 
 def approvals(session: Session, status: str | None = None, run_id: str | None = None) -> list[m.Approval]:
@@ -24,4 +25,4 @@ def approvals(session: Session, status: str | None = None, run_id: str | None = 
         q = q.where(m.Approval.status == status)
     if run_id:
         q = q.where(m.Approval.run_id == run_id)
-    return list(session.exec(q.order_by(m.Approval.created_at.desc())).all())
+    return session.exec(q.order_by(m.Approval.created_at.desc())).all()

@@ -10,9 +10,20 @@ FINISHED = ("completed", "escalated", "failed", "cancelled")
 
 
 def list_runs(session: Session) -> list[dict]:
-    return [{"id": r.id, "fixture_id": r.fixture_id, "status": r.status, "state": r.state, "llm_mode": r.llm_mode,
-             "llm_model": r.llm_model, "started_at": r.started_at, "finished_at": r.finished_at,
-             "decision_type": (r.decision or {}).get("type")} for r in runs.runs(session)]
+    return [
+        {
+            "id": r.id,
+            "fixture_id": r.fixture_id,
+            "status": r.status,
+            "state": r.state,
+            "llm_mode": r.llm_mode,
+            "llm_model": r.llm_model,
+            "started_at": r.started_at,
+            "finished_at": r.finished_at,
+            "decision_type": (r.decision or {}).get("type"),
+        }
+        for r in runs.runs(session)
+    ]
 
 
 def run_detail(session: Session, run_id: str) -> dict:
@@ -25,8 +36,7 @@ def run_detail(session: Session, run_id: str) -> dict:
         **data,
         "context": {"node": mem.get("node"), "sku": mem.get("sku"), "recommendation_id": mem.get("recommendation_id")},
         "finished": r.status in FINISHED,
-        "purchase_orders": [{**p.model_dump(), "events": [e.model_dump() for e in orders.po_events(session, p.id)]}
-                            for p in orders.purchase_orders(session, run_id=run_id)],
+        "purchase_orders": [_with_events(session, p) for p in orders.purchase_orders(session, run_id=run_id)],
         "transfers": [t.model_dump() for t in orders.transfers(session, run_id=run_id)],
         "approvals": [a.model_dump() for a in runs.approvals(session, run_id=run_id)],
     }
@@ -41,5 +51,8 @@ def approvals(session: Session, status: str | None) -> list[dict]:
 
 
 def purchase_orders(session: Session) -> list[dict]:
-    return [{**p.model_dump(), "events": [e.model_dump() for e in orders.po_events(session, p.id)]}
-            for p in orders.purchase_orders(session)]
+    return [_with_events(session, p) for p in orders.purchase_orders(session)]
+
+
+def _with_events(session: Session, po) -> dict:
+    return {**po.model_dump(), "events": [e.model_dump() for e in orders.po_events(session, po.id)]}

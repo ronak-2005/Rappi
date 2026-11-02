@@ -8,7 +8,6 @@ It only SELECTs and works with either session type.
 """
 
 from datetime import date, timedelta
-from typing import Optional
 
 from sqlmodel import Session, select
 
@@ -31,49 +30,85 @@ def world(session: Session) -> m.World:
 
 def offers_for(session: Session, sku_id: str) -> list[SupplierOffer]:
     today = world(session).today
-    limits = {a.supplier_id: a for a in session.exec(select(m.SupplierAvailability).where(
-        m.SupplierAvailability.sku_id == sku_id, m.SupplierAvailability.until >= today)).all()}
+    limits = {
+        a.supplier_id: a
+        for a in session.exec(
+            select(m.SupplierAvailability).where(
+                m.SupplierAvailability.sku_id == sku_id, m.SupplierAvailability.until >= today
+            )
+        ).all()
+    }
     out = []
     for t in session.exec(select(m.SupplierTerm).where(m.SupplierTerm.sku_id == sku_id)).all():
         s = session.get(m.Supplier, t.supplier_id)
         lim = limits.get(s.id)
-        out.append(SupplierOffer(
-            supplier_id=s.id, supplier_name=s.name, active=s.active, unit_cost=t.unit_cost, moq=t.moq,
-            case_pack=t.case_pack, lead_time_days=t.lead_time_days, express_lead_days=t.express_lead_days,
-            express_premium_per_unit=t.express_premium_per_unit, max_qty=t.max_qty,
-            remaining_shelf_life_days=t.remaining_shelf_life_days, delivery_weekdays=s.delivery_weekdays,
-            cutoff_hour=s.cutoff_hour, fill_rate=s.fill_rate, on_time_rate=s.on_time_rate,
-            lead_time_sigma_days=s.lead_time_sigma_days,
-            available_qty=lim.available_qty if lim else None,
-            availability_note=f"until {lim.until}: {lim.note}" if lim else "",
-        ))
+        out.append(
+            SupplierOffer(
+                supplier_id=s.id,
+                supplier_name=s.name,
+                active=s.active,
+                unit_cost=t.unit_cost,
+                moq=t.moq,
+                case_pack=t.case_pack,
+                lead_time_days=t.lead_time_days,
+                express_lead_days=t.express_lead_days,
+                express_premium_per_unit=t.express_premium_per_unit,
+                max_qty=t.max_qty,
+                remaining_shelf_life_days=t.remaining_shelf_life_days,
+                delivery_weekdays=s.delivery_weekdays,
+                cutoff_hour=s.cutoff_hour,
+                fill_rate=s.fill_rate,
+                on_time_rate=s.on_time_rate,
+                lead_time_sigma_days=s.lead_time_sigma_days,
+                available_qty=lim.available_qty if lim else None,
+                availability_note=f"until {lim.until}: {lim.note}" if lim else "",
+            )
+        )
     return out
 
 
 def open_receipts(session: Session, node_id: str, sku_id: str, today: date) -> list[Receipt]:
     receipts = []
-    pos = session.exec(select(m.PurchaseOrder).where(
-        m.PurchaseOrder.node_id == node_id, m.PurchaseOrder.sku_id == sku_id,
-        m.PurchaseOrder.status.in_(OPEN_PO_STATUSES), m.PurchaseOrder.expected_delivery >= today,
-    )).all()
+    pos = session.exec(
+        select(m.PurchaseOrder).where(
+            m.PurchaseOrder.node_id == node_id,
+            m.PurchaseOrder.sku_id == sku_id,
+            m.PurchaseOrder.status.in_(OPEN_PO_STATUSES),
+            m.PurchaseOrder.expected_delivery >= today,
+        )
+    ).all()
     for po in pos:
         qty = po.qty_confirmed if po.qty_confirmed is not None else po.qty_ordered
         if qty > 0:
-            receipts.append(Receipt(day=(po.expected_delivery - today).days, qty=qty,
-                                    remaining_shelf_life_days=po.remaining_shelf_life_days, source=po.id))
-    transfers = session.exec(select(m.Transfer).where(
-        m.Transfer.to_node == node_id, m.Transfer.sku_id == sku_id,
-        m.Transfer.status.in_(("planned", "in_transit")), m.Transfer.eta >= today,
-    )).all()
+            receipts.append(
+                Receipt(
+                    day=(po.expected_delivery - today).days,
+                    qty=qty,
+                    remaining_shelf_life_days=po.remaining_shelf_life_days,
+                    source=po.id,
+                )
+            )
+    transfers = session.exec(
+        select(m.Transfer).where(
+            m.Transfer.to_node == node_id,
+            m.Transfer.sku_id == sku_id,
+            m.Transfer.status.in_(("planned", "in_transit")),
+            m.Transfer.eta >= today,
+        )
+    ).all()
     receipts += [Receipt(day=(t.eta - today).days, qty=t.qty, source=t.id) for t in transfers]
     return sorted(receipts, key=lambda r: r.day)
 
 
-def budget_remaining(session: Session, node_id: str, category: str, today: date) -> Optional[float]:
-    b = session.exec(select(m.Budget).where(
-        m.Budget.node_id == node_id, m.Budget.category == category,
-        m.Budget.period_start <= today, m.Budget.period_end >= today,
-    )).first()
+def budget_remaining(session: Session, node_id: str, category: str, today: date) -> float | None:
+    b = session.exec(
+        select(m.Budget).where(
+            m.Budget.node_id == node_id,
+            m.Budget.category == category,
+            m.Budget.period_start <= today,
+            m.Budget.period_end >= today,
+        )
+    ).first()
     return None if b is None else round(b.total - b.committed, 2)
 
 
@@ -81,49 +116,86 @@ def zone_free(session: Session, node_id: str, zone: str, today: date, days: int 
     z = session.exec(select(m.StorageZone).where(m.StorageZone.node_id == node_id, m.StorageZone.zone == zone)).first()
     if z is None:
         raise NotFoundError("storage_zone", f"{node_id}/{zone}")
-    used = {o.day: o.used_l for o in session.exec(select(m.ZoneOccupancy).where(
-        m.ZoneOccupancy.node_id == node_id, m.ZoneOccupancy.zone == zone,
-        m.ZoneOccupancy.day >= today, m.ZoneOccupancy.day < today + timedelta(days=days),
-    )).all()}
+    used = {
+        o.day: o.used_l
+        for o in session.exec(
+            select(m.ZoneOccupancy).where(
+                m.ZoneOccupancy.node_id == node_id,
+                m.ZoneOccupancy.zone == zone,
+                m.ZoneOccupancy.day >= today,
+                m.ZoneOccupancy.day < today + timedelta(days=days),
+            )
+        ).all()
+    }
     return [round(z.capacity_l - used.get(today + timedelta(days=i), 0.0), 2) for i in range(days)]
 
 
 def demand_signal(session: Session, node_id: str, sku_id: str) -> DemandSignal:
     today = world(session).today
-    sales = session.exec(select(m.SalesHistory).where(
-        m.SalesHistory.node_id == node_id, m.SalesHistory.sku_id == sku_id,
-        m.SalesHistory.day >= today - timedelta(days=14), m.SalesHistory.day < today)).all()
-    fc = session.exec(select(m.Forecast).where(
-        m.Forecast.node_id == node_id, m.Forecast.sku_id == sku_id, m.Forecast.day >= today,
-        m.Forecast.day < today + timedelta(days=7))).all()
+    sales = session.exec(
+        select(m.SalesHistory).where(
+            m.SalesHistory.node_id == node_id,
+            m.SalesHistory.sku_id == sku_id,
+            m.SalesHistory.day >= today - timedelta(days=14),
+            m.SalesHistory.day < today,
+        )
+    ).all()
+    fc = session.exec(
+        select(m.Forecast).where(
+            m.Forecast.node_id == node_id,
+            m.Forecast.sku_id == sku_id,
+            m.Forecast.day >= today,
+            m.Forecast.day < today + timedelta(days=7),
+        )
+    ).all()
     promos = session.exec(select(m.Promotion).where(m.Promotion.node_id == node_id, m.Promotion.sku_id == sku_id)).all()
     return demand_engine.analyze(
         forecast_per_day=(sum(f.units for f in fc) / len(fc)) if fc else 0.0,
         sales=[((today - x.day).days, x.units, x.stocked_out) for x in sales],
-        promotions=[{"start_offset": (p.start - today).days, "end_offset": (p.end - today).days,
-                     "uplift_pct": p.uplift_pct, "description": p.description} for p in promos],
+        promotions=[
+            {
+                "start_offset": (p.start - today).days,
+                "end_offset": (p.end - today).days,
+                "uplift_pct": p.uplift_pct,
+                "description": p.description,
+            }
+            for p in promos
+        ],
     )
 
 
 def transfer_sources(session: Session, to_node: str, sku_id: str, policy) -> list[TransferSource]:
     """Other stores' surplus = stock beyond their OWN protection interval need (never rob one store to save another)."""
     out = []
-    for inv in session.exec(select(m.Inventory).where(m.Inventory.sku_id == sku_id, m.Inventory.node_id != to_node)).all():
+    for inv in session.exec(
+        select(m.Inventory).where(m.Inventory.sku_id == sku_id, m.Inventory.node_id != to_node)
+    ).all():
         node = session.get(m.Node, inv.node_id)
         try:
             ctx = build_context(session, inv.node_id, sku_id, with_transfers=False)
         except NotFoundError:
             continue
         surplus = int(max(0.0, -requirement(ctx, policy).net_requirement))
-        out.append(TransferSource(node_id=inv.node_id, surplus=surplus, lead_days=node.transfer_lead_days,
-                                  cost_per_unit=node.transfer_cost_per_unit,
-                                  remaining_shelf_life_days=inv.remaining_shelf_life_days))
+        out.append(
+            TransferSource(
+                node_id=inv.node_id,
+                surplus=surplus,
+                lead_days=node.transfer_lead_days,
+                cost_per_unit=node.transfer_cost_per_unit,
+                remaining_shelf_life_days=inv.remaining_shelf_life_days,
+            )
+        )
     return out
 
 
-def build_context(session: Session, node_id: str, sku_id: str, recommendation_id: Optional[str] = None,
-                  exclude_po_ids: tuple[str, ...] = (), demand_assumption: Optional[DemandAssumption] = None,
-                  with_transfers: bool = True) -> OptionContext:
+def build_context(
+    session: Session,
+    node_id: str,
+    sku_id: str,
+    recommendation_id: str | None = None,
+    demand_assumption: DemandAssumption | None = None,
+    with_transfers: bool = True,
+) -> OptionContext:
     """Engine input for one SKU at one store. `demand_assumption` replaces the forecast where the agent
     decided the forecast is wrong (Scenario 3); `with_transfers` adds other stores' spare stock."""
     w = world(session)
@@ -134,10 +206,17 @@ def build_context(session: Session, node_id: str, sku_id: str, recommendation_id
     inv = session.exec(select(m.Inventory).where(m.Inventory.node_id == node_id, m.Inventory.sku_id == sku_id)).first()
     if inv is None:
         raise NotFoundError("inventory", f"{node_id}/{sku_id}")
-    fc = {f.day: f for f in session.exec(select(m.Forecast).where(
-        m.Forecast.node_id == node_id, m.Forecast.sku_id == sku_id, m.Forecast.day >= today,
-        m.Forecast.day < today + timedelta(days=SIM_DAYS),
-    )).all()}
+    fc = {
+        f.day: f
+        for f in session.exec(
+            select(m.Forecast).where(
+                m.Forecast.node_id == node_id,
+                m.Forecast.sku_id == sku_id,
+                m.Forecast.day >= today,
+                m.Forecast.day < today + timedelta(days=SIM_DAYS),
+            )
+        ).all()
+    }
     last = None
     demand, sigmas = [], []
     for i in range(SIM_DAYS):
@@ -149,21 +228,31 @@ def build_context(session: Session, node_id: str, sku_id: str, recommendation_id
         last = f
     demand = demand_engine.apply_assumption(demand, demand_assumption)
     rec = session.get(m.Recommendation, recommendation_id) if recommendation_id else None
-    receipts = [r for r in open_receipts(session, node_id, sku_id, today) if r.source not in exclude_po_ids]
+    receipts = open_receipts(session, node_id, sku_id, today)
     sources = []
     if with_transfers:
         from shared.config.policy import get_policy
+
         sources = transfer_sources(session, node_id, sku_id, get_policy())
     return OptionContext(
-        today=today, now_hour=w.now_hour, on_hand=inv.on_hand,
+        today=today,
+        now_hour=w.now_hour,
+        on_hand=inv.on_hand,
         on_hand_remaining_shelf_life_days=inv.remaining_shelf_life_days,
-        demand=demand, sigmas=sigmas, open_receipts=receipts, unit_volume_l=sku.unit_volume_l,
-        zone_free_l=zone_free(session, node_id, sku.zone, today), review_period_days=sku.review_period_days,
-        unit_margin=sku.unit_margin, budget_remaining=budget_remaining(session, node_id, sku.category, today),
+        demand=demand,
+        sigmas=sigmas,
+        open_receipts=receipts,
+        unit_volume_l=sku.unit_volume_l,
+        zone_free_l=zone_free(session, node_id, sku.zone, today),
+        review_period_days=sku.review_period_days,
+        unit_margin=sku.unit_margin,
+        budget_remaining=budget_remaining(session, node_id, sku.category, today),
         offers=offers_for(session, sku_id),
-        recommendation_qty=rec.qty if rec else None, recommendation_supplier=rec.supplier_id if rec else None,
+        recommendation_qty=rec.qty if rec else None,
+        recommendation_supplier=rec.supplier_id if rec else None,
         transfer_sources=sources,
-        demand_note=f"assumption {demand_assumption.per_day}/day" + (
-            f" until day {demand_assumption.until_day}" if demand_assumption and demand_assumption.until_day else "")
-        if demand_assumption else "forecast",
+        demand_note=f"assumption {demand_assumption.per_day}/day"
+        + (f" until day {demand_assumption.until_day}" if demand_assumption and demand_assumption.until_day else "")
+        if demand_assumption
+        else "forecast",
     )

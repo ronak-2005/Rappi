@@ -1,6 +1,6 @@
 """The decision form the agent submits, and the reports produced when it is validated, executed and verified."""
 
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -12,19 +12,22 @@ DecisionType = Literal["accept", "modify", "reject", "investigate", "escalate"]
 class DecisionReason(BaseModel):
     factor: str = Field(description="short name, e.g. open_po_ignored, budget, storage, shelf_life")
     finding: str = Field(description="what the evidence shows, with the numbers")
-    evidence: list[str] = Field(default_factory=list, description="evidence_id values of the tool results that support this")
+    evidence: list[str] = Field(
+        default_factory=list, description="evidence_id values of the tool results that support this"
+    )
 
 
 class Decision(BaseModel):
     type: DecisionType
     node: str
     sku: str
-    recommendation_id: Optional[str] = None
+    recommendation_id: str | None = None
     lines: list[PlanLine] = Field(default_factory=list, description="purchase order lines to place")
     transfers: list[TransferLine] = Field(default_factory=list, description="stock to move from other dark stores")
-    demand_assumption: Optional[DemandAssumption] = Field(
-        default=None, description="only if you decided the forecast is wrong: the demand per day this plan is built on")
-    option_id: Optional[str] = Field(default=None, description="id of the engine option this follows, if any")
+    demand_assumption: DemandAssumption | None = Field(
+        default=None, description="only if you decided the forecast is wrong: the demand per day this plan is built on"
+    )
+    option_id: str | None = Field(default=None, description="id of the engine option this follows, if any")
     reasons: list[DecisionReason] = Field(min_length=1)
     risks: list[str] = Field(default_factory=list)
     confidence: Literal["low", "medium", "high"] = "medium"
@@ -57,7 +60,7 @@ class ValidationReport(BaseModel):
     hard_failures: list[RuleResult]
     soft_violations: list[RuleResult]
     all_results: list[RuleResult]
-    evaluation: Optional[Option] = None
+    evaluation: Option | None = None
 
 
 class ExecutionLine(BaseModel):
@@ -67,7 +70,7 @@ class ExecutionLine(BaseModel):
     qty_confirmed: int
     status: str  # confirmed | partially_confirmed | rejected | failed
     requested_delivery: str
-    confirmed_delivery: Optional[str] = None
+    confirmed_delivery: str | None = None
     unit_cost: float
     message: str = ""
     attempts: int = 1
@@ -76,11 +79,6 @@ class ExecutionLine(BaseModel):
 
 class ExecutionResult(BaseModel):
     lines: list[ExecutionLine]
-
-    @property
-    def all_as_requested(self) -> bool:
-        return all(ln.status == "confirmed" and ln.qty_confirmed == ln.qty_requested
-                   and ln.confirmed_delivery == ln.requested_delivery for ln in self.lines)
 
 
 class VerificationReport(BaseModel):

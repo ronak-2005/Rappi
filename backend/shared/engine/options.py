@@ -11,13 +11,21 @@ LLM proposes (validate_plan / validator) and for verification after the supplier
 
 import math
 from datetime import date
-from typing import Optional
 
 from pydantic import BaseModel
 
 from shared.config.policy import Policy
-from shared.domain.planning import (Option, Plan, PlanLine, Projection, Receipt, Requirement, SupplierOffer,
-                                    TransferLine, TransferSource)
+from shared.domain.planning import (
+    Option,
+    Plan,
+    PlanLine,
+    Projection,
+    Receipt,
+    Requirement,
+    SupplierOffer,
+    TransferLine,
+    TransferSource,
+)
 from shared.engine.calendar import arrival_day, is_delivery_day
 from shared.engine.cost import decision_cost
 from shared.engine.projection import project
@@ -26,10 +34,11 @@ from shared.engine.requirement import net_requirement, round_down_to_pack, round
 
 class OptionContext(BaseModel):
     """Everything the engine needs about one SKU at one node. Built by services from the DB."""
+
     today: date
     now_hour: int
     on_hand: float
-    on_hand_remaining_shelf_life_days: Optional[int] = None
+    on_hand_remaining_shelf_life_days: int | None = None
     demand: list[float]  # forecast from day 0; its length is the simulation length
     sigmas: list[float]
     open_receipts: list[Receipt]
@@ -37,10 +46,10 @@ class OptionContext(BaseModel):
     zone_free_l: list[float]  # free litres for this SKU per day (capacity − other SKUs)
     review_period_days: int
     unit_margin: float
-    budget_remaining: Optional[float] = None
+    budget_remaining: float | None = None
     offers: list[SupplierOffer]
-    recommendation_qty: Optional[int] = None
-    recommendation_supplier: Optional[str] = None
+    recommendation_qty: int | None = None
+    recommendation_supplier: str | None = None
     transfer_sources: list[TransferSource] = []
     demand_note: str = "forecast"  # or a description of the demand assumption in use
 
@@ -50,11 +59,11 @@ def can_supply(offer: SupplierOffer) -> bool:
 
 
 # ---------------------------------------------------------------- helpers
-def _offer(ctx: OptionContext, supplier_id: str) -> Optional[SupplierOffer]:
+def _offer(ctx: OptionContext, supplier_id: str) -> SupplierOffer | None:
     return next((o for o in ctx.offers if o.supplier_id == supplier_id), None)
 
 
-def earliest_arrival(ctx: OptionContext, offer: SupplierOffer, mode: str = "standard") -> Optional[int]:
+def earliest_arrival(ctx: OptionContext, offer: SupplierOffer, mode: str = "standard") -> int | None:
     lead = offer.lead_time_days if mode == "standard" else offer.express_lead_days
     if lead is None:
         return None
@@ -75,36 +84,58 @@ def horizon(ctx: OptionContext) -> int:
     return earliest_arrival(ctx, ref) + ctx.review_period_days
 
 
-def requirement(ctx: OptionContext, policy: Policy, offer: Optional[SupplierOffer] = None) -> Requirement:
+def requirement(ctx: OptionContext, policy: Policy, offer: SupplierOffer | None = None) -> Requirement:
     """Net requirement over the common horizon, rounded to `offer`'s pack/MOQ (reference offer by default)."""
     ref = reference_offer(ctx)
     offer = offer or ref
     arrival = earliest_arrival(ctx, ref)
     req = net_requirement(
-        on_hand=ctx.on_hand, demand=ctx.demand, sigmas=ctx.sigmas, open_receipts=ctx.open_receipts,
-        arrival_day=arrival, review_period_days=ctx.review_period_days, z=policy.planning.service_level_z,
-        lead_time_sigma_days=ref.lead_time_sigma_days, moq=offer.moq, case_pack=offer.case_pack,
+        on_hand=ctx.on_hand,
+        demand=ctx.demand,
+        sigmas=ctx.sigmas,
+        open_receipts=ctx.open_receipts,
+        arrival_day=arrival,
+        review_period_days=ctx.review_period_days,
+        z=policy.planning.service_level_z,
+        lead_time_sigma_days=ref.lead_time_sigma_days,
+        moq=offer.moq,
+        case_pack=offer.case_pack,
     )
     req.rounded_for_supplier = offer.supplier_id
     return req
 
 
-def _project(ctx: OptionContext, policy: Policy, new: list[Receipt], extra_existing: list[Receipt] | None = None,
-             check_from: int = 0):
+def _project(
+    ctx: OptionContext,
+    policy: Policy,
+    new: list[Receipt],
+    extra_existing: list[Receipt] | None = None,
+    check_from: int = 0,
+):
     req = requirement(ctx, policy)
     return project(
-        on_hand=ctx.on_hand, on_hand_remaining_shelf_life_days=ctx.on_hand_remaining_shelf_life_days,
-        demand=ctx.demand, receipts=ctx.open_receipts + (extra_existing or []) + new,
-        unit_volume_l=ctx.unit_volume_l, zone_free_l=ctx.zone_free_l, safety_stock=req.safety_stock,
-        horizon_days=req.horizon_days, sell_buffer_days=policy.planning.shelf_life_sell_buffer_days,
+        on_hand=ctx.on_hand,
+        on_hand_remaining_shelf_life_days=ctx.on_hand_remaining_shelf_life_days,
+        demand=ctx.demand,
+        receipts=ctx.open_receipts + (extra_existing or []) + new,
+        unit_volume_l=ctx.unit_volume_l,
+        zone_free_l=ctx.zone_free_l,
+        safety_stock=req.safety_stock,
+        horizon_days=req.horizon_days,
+        sell_buffer_days=policy.planning.shelf_life_sell_buffer_days,
         check_ss_from_day=check_from,
     )
 
 
 def unavoidable_lost(ctx: OptionContext, policy: Policy) -> float:
     """Lost sales before ANY supplier could deliver (nothing a plan can fix)."""
-    arrivals = [a for o in ctx.offers if can_supply(o) for m in ("standard", "express")
-                if (a := earliest_arrival(ctx, o, m)) is not None]
+    arrivals = [
+        a
+        for o in ctx.offers
+        if can_supply(o)
+        for m in ("standard", "express")
+        if (a := earliest_arrival(ctx, o, m)) is not None
+    ]
     arrivals += [t.lead_days for t in ctx.transfer_sources if t.surplus > 0]
     first = min(arrivals) if arrivals else 0
     base = _project(ctx, policy, [])
@@ -112,17 +143,38 @@ def unavoidable_lost(ctx: OptionContext, policy: Policy) -> float:
 
 
 # ---------------------------------------------------------------- evaluation
-def evaluate_plan(ctx: OptionContext, policy: Policy, plan: Plan, *, option_id: str = "custom",
-                  kind: str = "custom", label: str = "Custom plan") -> Option:
+def evaluate_plan(
+    ctx: OptionContext,
+    policy: Policy,
+    plan: Plan,
+    *,
+    option_id: str = "custom",
+    kind: str = "custom",
+    label: str = "Custom plan",
+) -> Option:
     return evaluate_with_projection(ctx, policy, plan, option_id=option_id, kind=kind, label=label)[0]
 
 
-def evaluate_with_projection(ctx: OptionContext, policy: Policy, plan: Plan, *, option_id: str = "custom",
-                             kind: str = "custom", label: str = "Custom plan") -> tuple[Option, Projection]:
+def evaluate_with_projection(
+    ctx: OptionContext,
+    policy: Policy,
+    plan: Plan,
+    *,
+    option_id: str = "custom",
+    kind: str = "custom",
+    label: str = "Custom plan",
+) -> tuple[Option, Projection]:
     """Project the plan, price it and run every rule check. Returns the option and its day-by-day projection."""
     checks: dict[str, bool] = {
-        "supplier_known": True, "supplier_active": True, "express_available": True, "qty_positive": True,
-        "moq": True, "case_pack": True, "max_qty": True, "delivery_calendar": True, "supplier_availability": True,
+        "supplier_known": True,
+        "supplier_active": True,
+        "express_available": True,
+        "qty_positive": True,
+        "moq": True,
+        "case_pack": True,
+        "max_qty": True,
+        "delivery_calendar": True,
+        "supplier_availability": True,
         "transfer_source": True,
     }
     notes: list[str] = []
@@ -149,8 +201,10 @@ def evaluate_with_projection(ctx: OptionContext, policy: Policy, plan: Plan, *, 
             checks["max_qty"] = False
         if offer.available_qty is not None and line.qty > offer.available_qty:
             checks["supplier_availability"] = False
-            notes.append(f"line {i}: {offer.supplier_id} can only supply {offer.available_qty} more "
-                         f"({offer.availability_note or 'supplier said so'})")
+            notes.append(
+                f"line {i}: {offer.supplier_id} can only supply {offer.available_qty} more "
+                f"({offer.availability_note or 'supplier said so'})"
+            )
         earliest = earliest_arrival(ctx, offer, line.mode)
         if earliest is None:
             checks["express_available"] = False
@@ -159,9 +213,18 @@ def evaluate_with_projection(ctx: OptionContext, policy: Policy, plan: Plan, *, 
         day = line.delivery_day if line.delivery_day is not None else earliest
         if day < earliest or not is_delivery_day(ctx.today, day, offer.delivery_weekdays):
             checks["delivery_calendar"] = False
-            notes.append(f"line {i}: delivery day {day} not possible (earliest {earliest}, weekdays {offer.delivery_weekdays})")
-        receipts.append(Receipt(day=day, qty=line.qty, remaining_shelf_life_days=offer.remaining_shelf_life_days,
-                                source=f"plan:line{i}", is_new=True))
+            notes.append(
+                f"line {i}: delivery day {day} not possible (earliest {earliest}, weekdays {offer.delivery_weekdays})"
+            )
+        receipts.append(
+            Receipt(
+                day=day,
+                qty=line.qty,
+                remaining_shelf_life_days=offer.remaining_shelf_life_days,
+                source=f"plan:line{i}",
+                is_new=True,
+            )
+        )
         line_costs.append((line.qty, offer.unit_cost))
         if line.mode == "express":
             premium += line.qty * offer.express_premium_per_unit
@@ -173,8 +236,15 @@ def evaluate_with_projection(ctx: OptionContext, policy: Policy, plan: Plan, *, 
             checks["transfer_source"] = False
             notes.append(f"transfer {j}: {t.from_node} can spare {src.surplus if src else 0} units, asked {t.qty}")
             continue
-        receipts.append(Receipt(day=src.lead_days, qty=t.qty, remaining_shelf_life_days=src.remaining_shelf_life_days,
-                                source=f"plan:transfer{j}", is_new=True))
+        receipts.append(
+            Receipt(
+                day=src.lead_days,
+                qty=t.qty,
+                remaining_shelf_life_days=src.remaining_shelf_life_days,
+                source=f"plan:transfer{j}",
+                is_new=True,
+            )
+        )
         transfer_cost += t.qty * src.cost_per_unit
 
     check_from = min((r.day for r in receipts), default=earliest_arrival(ctx, reference_offer(ctx)))
@@ -209,21 +279,46 @@ def evaluate_with_projection(ctx: OptionContext, policy: Policy, plan: Plan, *, 
         soft.append("supplier_reliability")
 
     cost, breakdown = decision_cost(
-        line_costs=line_costs, express_premium=premium, reference_unit_cost=min(o.unit_cost for o in ctx.offers),
+        line_costs=line_costs,
+        express_premium=premium,
+        reference_unit_cost=min(o.unit_cost for o in ctx.offers),
         horizon_closes=[d.close for d in proj.days if d.day < proj.horizon_days],
-        holding_pct_per_day=policy.costs.holding_cost_pct_per_day, avoidable_lost_units=avoidable,
-        unit_margin=ctx.unit_margin, stockout_multiplier=policy.costs.stockout_cost_multiplier,
-        expired_units_new=proj.expired_units_new, transfer_cost=transfer_cost,
+        holding_pct_per_day=policy.costs.holding_cost_pct_per_day,
+        avoidable_lost_units=avoidable,
+        unit_margin=ctx.unit_margin,
+        stockout_multiplier=policy.costs.stockout_cost_multiplier,
+        expired_units_new=proj.expired_units_new,
+        transfer_cost=transfer_cost,
     )
     option = Option(
-        id=option_id, kind=kind, label=label, plan=plan, total_qty=total_qty, transfer_qty=plan.transfer_qty,
+        id=option_id,
+        kind=kind,
+        label=label,
+        plan=plan,
+        total_qty=total_qty,
+        transfer_qty=plan.transfer_qty,
         purchase_cost=purchase,
-        express_premium=round(premium, 2), decision_cost=cost, cost_breakdown=breakdown,
-        lost_units=proj.lost_units, expired_units=proj.expired_units_new, waste_pct=waste_pct,
-        min_close=proj.min_close, end_close=proj.end_close, over_capacity_days=new_over,
-        below_ss_days=proj.below_ss_days, checks=checks, hard_ok=hard_ok, soft_issues=soft, notes=notes,
+        express_premium=round(premium, 2),
+        decision_cost=cost,
+        cost_breakdown=breakdown,
+        lost_units=proj.lost_units,
+        expired_units=proj.expired_units_new,
+        waste_pct=waste_pct,
+        min_close=proj.min_close,
+        end_close=proj.end_close,
+        over_capacity_days=new_over,
+        below_ss_days=proj.below_ss_days,
+        checks=checks,
+        hard_ok=hard_ok,
+        soft_issues=soft,
+        notes=notes,
     )
     return option, proj
+
+
+def _single_line(ctx: OptionContext, policy: Policy, offer: SupplierOffer, qty: int) -> Option:
+    """Evaluate the simplest plan: one standard line from one supplier."""
+    return evaluate_plan(ctx, policy, Plan(lines=[PlanLine(supplier_id=offer.supplier_id, qty=qty)]))
 
 
 # ---------------------------------------------------------------- generation
@@ -234,9 +329,14 @@ def generate_options(ctx: OptionContext, policy: Policy) -> list[Option]:
     need = req.net_requirement
 
     if ctx.recommendation_qty and ctx.recommendation_supplier:
-        candidates.append(("as_recommended", "as_recommended",
-                           f"As recommended: {ctx.recommendation_qty} from {ctx.recommendation_supplier}",
-                           Plan(lines=[PlanLine(supplier_id=ctx.recommendation_supplier, qty=ctx.recommendation_qty)])))
+        candidates.append(
+            (
+                "as_recommended",
+                "as_recommended",
+                f"As recommended: {ctx.recommendation_qty} from {ctx.recommendation_supplier}",
+                Plan(lines=[PlanLine(supplier_id=ctx.recommendation_supplier, qty=ctx.recommendation_qty)]),
+            )
+        )
 
     if need > 0:
         for src in ctx.transfer_sources:
@@ -244,16 +344,28 @@ def generate_options(ctx: OptionContext, policy: Policy) -> list[Option]:
                 continue
             qty = min(src.surplus, math.ceil(need))
             if qty >= need:
-                candidates.append((f"transfer:{src.node_id}", "transfer",
-                                   f"Transfer {qty} from {src.node_id} (arrives day {src.lead_days})",
-                                   Plan(transfers=[TransferLine(from_node=src.node_id, qty=qty)])))
+                candidates.append(
+                    (
+                        f"transfer:{src.node_id}",
+                        "transfer",
+                        f"Transfer {qty} from {src.node_id} (arrives day {src.lead_days})",
+                        Plan(transfers=[TransferLine(from_node=src.node_id, qty=qty)]),
+                    )
+                )
             else:
                 for offer in (o for o in ctx.offers if can_supply(o)):
                     rest = round_to_pack(need - qty, offer.moq, offer.case_pack)
-                    candidates.append((f"transfer_plus:{src.node_id}:{offer.supplier_id}", "transfer_plus",
-                                       f"Transfer {qty} from {src.node_id} + {rest} from {offer.supplier_id}",
-                                       Plan(lines=[PlanLine(supplier_id=offer.supplier_id, qty=rest)],
-                                            transfers=[TransferLine(from_node=src.node_id, qty=qty)])))
+                    candidates.append(
+                        (
+                            f"transfer_plus:{src.node_id}:{offer.supplier_id}",
+                            "transfer_plus",
+                            f"Transfer {qty} from {src.node_id} + {rest} from {offer.supplier_id}",
+                            Plan(
+                                lines=[PlanLine(supplier_id=offer.supplier_id, qty=rest)],
+                                transfers=[TransferLine(from_node=src.node_id, qty=qty)],
+                            ),
+                        )
+                    )
         for offer in (o for o in ctx.offers if can_supply(o)):
             qty = round_to_pack(need, offer.moq, offer.case_pack)
             sid = offer.supplier_id
@@ -261,37 +373,63 @@ def generate_options(ctx: OptionContext, policy: Policy) -> list[Option]:
             candidates.append((f"standard:{sid}", "standard", f"{qty} from {sid}, standard delivery", std))
 
             if offer.express_lead_days is not None:
-                candidates.append((f"express:{sid}", "express", f"{qty} from {sid}, all express",
-                                   Plan(lines=[PlanLine(supplier_id=sid, qty=qty, mode="express")])))
+                candidates.append(
+                    (
+                        f"express:{sid}",
+                        "express",
+                        f"{qty} from {sid}, all express",
+                        Plan(lines=[PlanLine(supplier_id=sid, qty=qty, mode="express")]),
+                    )
+                )
                 bridge = _bridge_plan(ctx, policy, offer, need)
                 if bridge:
                     b, s_ = bridge.lines
-                    candidates.append((f"bridge:{sid}", "bridge",
-                                       f"Bridge {b.qty} express + {s_.qty} standard from {sid}", bridge))
+                    candidates.append(
+                        (f"bridge:{sid}", "bridge", f"Bridge {b.qty} express + {s_.qty} standard from {sid}", bridge)
+                    )
 
             two = _two_drops_plan(ctx, policy, offer, qty)
             if two:
                 a, b = two.lines
-                candidates.append((f"two_drops:{sid}", "two_drops",
-                                   f"{a.qty} on day {a.delivery_day} + {b.qty} on day {b.delivery_day} from {sid}", two))
+                candidates.append(
+                    (
+                        f"two_drops:{sid}",
+                        "two_drops",
+                        f"{a.qty} on day {a.delivery_day} + {b.qty} on day {b.delivery_day} from {sid}",
+                        two,
+                    )
+                )
 
             if ctx.budget_remaining is not None and qty * offer.unit_cost > ctx.budget_remaining:
                 within = round_down_to_pack(ctx.budget_remaining / offer.unit_cost, offer.case_pack)
                 if within >= offer.moq and within > 0:
-                    candidates.append((f"within_budget:{sid}", "within_budget",
-                                       f"{within} from {sid} (fits remaining budget)",
-                                       Plan(lines=[PlanLine(supplier_id=sid, qty=within)])))
+                    candidates.append(
+                        (
+                            f"within_budget:{sid}",
+                            "within_budget",
+                            f"{within} from {sid} (fits remaining budget)",
+                            Plan(lines=[PlanLine(supplier_id=sid, qty=within)]),
+                        )
+                    )
 
             wf = _waste_free_qty(ctx, policy, offer, qty)
             if wf is not None:
-                candidates.append((f"waste_free:{sid}", "waste_free", f"{wf} from {sid} (sells before expiry)",
-                                   Plan(lines=[PlanLine(supplier_id=sid, qty=wf)])))
+                candidates.append(
+                    (
+                        f"waste_free:{sid}",
+                        "waste_free",
+                        f"{wf} from {sid} (sells before expiry)",
+                        Plan(lines=[PlanLine(supplier_id=sid, qty=wf)]),
+                    )
+                )
 
     seen: set[tuple] = set()
     options: list[Option] = []
     for oid, kind, label, plan in candidates:
-        key = (tuple((ln.supplier_id, ln.qty, ln.mode, ln.delivery_day) for ln in plan.lines),
-               tuple((t.from_node, t.qty) for t in plan.transfers))
+        key = (
+            tuple((ln.supplier_id, ln.qty, ln.mode, ln.delivery_day) for ln in plan.lines),
+            tuple((t.from_node, t.qty) for t in plan.transfers),
+        )
         if key in seen:
             continue
         if kind != "as_recommended":  # the recommendation is always shown, even if identical to an option
@@ -302,7 +440,7 @@ def generate_options(ctx: OptionContext, policy: Policy) -> list[Option]:
     return options
 
 
-def _bridge_plan(ctx: OptionContext, policy: Policy, offer: SupplierOffer, need: float) -> Optional[Plan]:
+def _bridge_plan(ctx: OptionContext, policy: Policy, offer: SupplierOffer, need: float) -> Plan | None:
     """Express bridge sized to keep stock ≥ safety stock until the standard delivery, rest standard."""
     std_day = earliest_arrival(ctx, offer, "standard")
     exp_day = earliest_arrival(ctx, offer, "express")
@@ -318,15 +456,18 @@ def _bridge_plan(ctx: OptionContext, policy: Policy, offer: SupplierOffer, need:
     rest = round_to_pack(need - bridge, offer.moq, offer.case_pack)
     if bridge <= 0 or rest <= 0:
         return None
-    return Plan(lines=[PlanLine(supplier_id=offer.supplier_id, qty=bridge, mode="express"),
-                       PlanLine(supplier_id=offer.supplier_id, qty=rest, mode="standard")])
+    return Plan(
+        lines=[
+            PlanLine(supplier_id=offer.supplier_id, qty=bridge, mode="express"),
+            PlanLine(supplier_id=offer.supplier_id, qty=rest, mode="standard"),
+        ]
+    )
 
 
-def _two_drops_plan(ctx: OptionContext, policy: Policy, offer: SupplierOffer, qty: int) -> Optional[Plan]:
+def _two_drops_plan(ctx: OptionContext, policy: Policy, offer: SupplierOffer, qty: int) -> Plan | None:
     """If one delivery overflows storage: first drop = what fits, second drop on the first day it fits
     without breaching safety stock before it."""
-    single = evaluate_plan(ctx, policy, Plan(lines=[PlanLine(supplier_id=offer.supplier_id, qty=qty)]))
-    if single.checks["capacity"]:
+    if _single_line(ctx, policy, offer, qty).checks["capacity"]:
         return None
     day1 = earliest_arrival(ctx, offer)
     base = _project(ctx, policy, [])
@@ -337,12 +478,16 @@ def _two_drops_plan(ctx: OptionContext, policy: Policy, offer: SupplierOffer, qt
         return None
     drop2 = round_to_pack(qty - drop1, offer.moq, offer.case_pack)
     h = horizon(ctx)
-    best: Optional[Plan] = None
+    best: Plan | None = None
     for d2 in range(day1 + 1, h):
         if not is_delivery_day(ctx.today, d2, offer.delivery_weekdays):
             continue
-        plan = Plan(lines=[PlanLine(supplier_id=offer.supplier_id, qty=drop1, delivery_day=day1),
-                           PlanLine(supplier_id=offer.supplier_id, qty=drop2, delivery_day=d2)])
+        plan = Plan(
+            lines=[
+                PlanLine(supplier_id=offer.supplier_id, qty=drop1, delivery_day=day1),
+                PlanLine(supplier_id=offer.supplier_id, qty=drop2, delivery_day=d2),
+            ]
+        )
         ev = evaluate_plan(ctx, policy, plan)
         if ev.checks["capacity"] and not ev.below_ss_days:
             return plan
@@ -351,17 +496,11 @@ def _two_drops_plan(ctx: OptionContext, policy: Policy, offer: SupplierOffer, qt
     return best
 
 
-def _waste_free_qty(ctx: OptionContext, policy: Policy, offer: SupplierOffer, qty: int) -> Optional[int]:
+def _waste_free_qty(ctx: OptionContext, policy: Policy, offer: SupplierOffer, qty: int) -> int | None:
     """Largest pack-multiple ≥ MOQ below `qty` that meets the shelf-life rule (None if qty already does)."""
     if offer.remaining_shelf_life_days is None:
         return None
-    full = evaluate_plan(ctx, policy, Plan(lines=[PlanLine(supplier_id=offer.supplier_id, qty=qty)]))
-    if full.checks["shelf_life"]:
+    if _single_line(ctx, policy, offer, qty).checks["shelf_life"]:
         return None
-    q = qty - offer.case_pack
-    while q >= max(offer.moq, 1):
-        ev = evaluate_plan(ctx, policy, Plan(lines=[PlanLine(supplier_id=offer.supplier_id, qty=q)]))
-        if ev.checks["shelf_life"]:
-            return q
-        q -= offer.case_pack
-    return None
+    smaller = range(qty - offer.case_pack, max(offer.moq, 1) - 1, -offer.case_pack)
+    return next((q for q in smaller if _single_line(ctx, policy, offer, q).checks["shelf_life"]), None)

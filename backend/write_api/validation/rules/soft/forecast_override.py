@@ -15,7 +15,11 @@ def check(i: RuleInput) -> RuleResult:
     sig = i.demand_signal
     supported = max(sig.forecast_per_day, sig.recent_7d_avg or 0, sig.recent_3d_avg or 0) if sig else 0
     ok = i.demand.per_day <= supported * TOLERANCE
-    return RuleResult(rule="forecast_override", kind="soft", passed=ok,
-                      message=f"assumes {i.demand.per_day:g}/day; evidence supports up to {supported:g}/day "
-                              f"(forecast {sig.forecast_per_day if sig else '?'}, recent 7-day {sig.recent_7d_avg if sig else '?'}, "
-                              f"3-day {sig.recent_3d_avg if sig else '?'})")
+    return RuleResult(
+        rule="forecast_override",
+        kind="soft",
+        passed=ok,
+        message=f"assumes {i.demand.per_day:g}/day; evidence supports up to {supported:g}/day "
+        f"(forecast {sig.forecast_per_day if sig else '?'}, recent 7-day {sig.recent_7d_avg if sig else '?'}, "
+        f"3-day {sig.recent_3d_avg if sig else '?'})",
+    )

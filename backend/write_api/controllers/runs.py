@@ -2,23 +2,13 @@
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 
-from shared.config.llm_settings import load_llm_settings
 from shared.domain.errors import InvalidRequestError
 from shared.domain.fixtures import load_fixture_file
 from write_api.schemas.requests import StartRun
-from write_api.server.deps import db_file
+from write_api.server.deps import db_file, launch
 from write_api.services import fixture_service, run_service
 
 router = APIRouter(tags=["runs"])
-
-
-def deps_for(request: Request, llm_env=None, llm_mode=None):
-    settings = load_llm_settings(llm_env)
-    if llm_mode:
-        settings.llm_mode = llm_mode
-    st = request.app.state
-    return run_service.make_deps(db_file=st.db_file, read=st.read_client, supplier=st.supplier_client,
-                                 llm_settings=settings, llm_env=llm_env)
 
 
 @router.post("/runs")
@@ -28,15 +18,20 @@ def start_run(body: StartRun, request: Request, background: BackgroundTasks):
         fx = fixture_service.load_world(body.fixture_id, st.db_file, st.supplier_client)
     else:
         fx = load_fixture_file(st.read_client.get("/world")["fixture_id"])
-    trigger_type, ref = ("recommendation", body.recommendation_id) if body.recommendation_id \
-        else (fx.trigger.type, fx.trigger.ref)
+    trigger_type, ref = (
+        ("recommendation", body.recommendation_id) if body.recommendation_id else (fx.trigger.type, fx.trigger.ref)
+    )
     if ref is None:
         raise InvalidRequestError("nothing to run: no trigger", "write_api.controllers.runs")
-    deps = deps_for(request, body.llm_env, body.llm_mode)
-    run_id = run_service.start(deps, ref, trigger_type)
-    background.add_task(run_service.run, deps, run_id)
-    return {"run_id": run_id, "trigger_type": trigger_type, "trigger_ref": ref, "llm_mode": deps.llm_mode,
-            "llm_model": getattr(deps.llm, "model", ""), "stream": f"/runs/{run_id}/stream (read_api)"}
+    run_id, deps = launch(request, background, ref, trigger_type, llm_env=body.llm_env, llm_mode=body.llm_mode)
+    return {
+        "run_id": run_id,
+        "trigger_type": trigger_type,
+        "trigger_ref": ref,
+        "llm_mode": deps.llm_mode,
+        "llm_model": getattr(deps.llm, "model", ""),
+        "stream": f"/runs/{run_id}/stream (read_api)",
+    }
 
 
 @router.post("/runs/{run_id}/cancel")

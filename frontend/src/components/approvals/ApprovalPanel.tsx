@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { writeApi } from '../../api/write'
 import type { Approval } from '../../types/api'
 import { ErrorBox } from '../common/ErrorBox'
+import { humanize } from '../../format'
 
 export function ApprovalPanel({ approval, names = {}, onDone }: { approval: Approval; names?: Record<string, string>; onDone: () => void }) {
   const [comment, setComment] = useState('')
@@ -29,7 +30,7 @@ export function ApprovalPanel({ approval, names = {}, onDone }: { approval: Appr
     <section className="approval" aria-live="polite">
       <h2>Your approval is needed</h2>
       <p>The plan passes every hard rule but breaks:</p>
-      <ul>{approval.reasons.map((r) => <li key={r}>{r.replace(/^[a-z_]+: /, (m) => m.replaceAll('_', ' '))}</li>)}</ul>
+      <ul>{approval.reasons.map((r) => <li key={r}>{r.replace(/^[a-z_]+: /, humanize)}</li>)}</ul>
       <table style={{ maxWidth: 520 }}>
         <thead><tr><th>Supplier</th><th>Delivery</th><th className="num">Quantity</th></tr></thead>
         <tbody>

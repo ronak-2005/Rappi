@@ -25,9 +25,12 @@ def facts():
 
 
 def decision(qty, typ="modify", evidence=("c_get_inventory", "c_get_open_pos")):
-    return {"type": typ, "lines": [{"supplier_id": "SUP_A", "qty": qty}] if qty else [],
-            "reasons": [{"factor": "requirement", "finding": "see tools", "evidence": list(evidence)}],
-            "summary": f"buy {qty}"}
+    return {
+        "type": typ,
+        "lines": [{"supplier_id": "SUP_A", "qty": qty}] if qty else [],
+        "reasons": [{"factor": "requirement", "finding": "see tools", "evidence": list(evidence)}],
+        "summary": f"buy {qty}",
+    }
 
 
 @pytest.fixture
@@ -36,12 +39,18 @@ def stack(db_file):
         read = ReadApiClient(TestClient(create_read(db_file)))
         supplier = SupplierClient(TestClient(create_supplier()))
         fx = fixture_service.load_world(fixture_id, db_file, supplier)
-        deps = run_service.make_deps(db_file=db_file, read=read, supplier=supplier,
-                                     llm_settings=LLMSettings(llm_mode="baseline"), approver=approver)
+        deps = run_service.make_deps(
+            db_file=db_file,
+            read=read,
+            supplier=supplier,
+            llm_settings=LLMSettings(llm_mode="baseline"),
+            approver=approver,
+        )
         deps.llm = ScriptedLLM(steps)
         orch = Orchestrator(deps)
         run_id = orch.start(fx.trigger.recommendation.id)
         return orch, run_id, deps
+
     return _make
 
 
@@ -57,8 +66,10 @@ def pos(db_file):
 
 
 def test_rulebook_rejection_then_revision(stack, db_file):
-    orch, run_id, _ = stack("s1_modify_open_po_ignored",
-                            facts() + [call("submit_decision", decision(800)), call("submit_decision", decision(500))])
+    orch, run_id, _ = stack(
+        "s1_modify_open_po_ignored",
+        facts() + [call("submit_decision", decision(800)), call("submit_decision", decision(500))],
+    )
     run = orch.run(run_id)
     assert run.status == "completed" and run.revisions == 1
     v = steps_of(db_file, run_id, "validation")
@@ -67,10 +78,15 @@ def test_rulebook_rejection_then_revision(stack, db_file):
 
 
 def test_missing_evidence_is_sent_back(stack, db_file):
-    orch, run_id, _ = stack("s1_modify_open_po_ignored", [
-        call("get_inventory", {}, "c_get_inventory"),
-        call("submit_decision", decision(500, evidence=("c_get_inventory",))),  # skipped open POs etc.
-        *facts(), call("submit_decision", decision(500))])
+    orch, run_id, _ = stack(
+        "s1_modify_open_po_ignored",
+        [
+            call("get_inventory", {}, "c_get_inventory"),
+            call("submit_decision", decision(500, evidence=("c_get_inventory",))),  # skipped open POs etc.
+            *facts(),
+            call("submit_decision", decision(500)),
+        ],
+    )
     run = orch.run(run_id)
     gate = steps_of(db_file, run_id, "gate")
     assert "get_open_pos" in gate[0].payload["missing_tools"]
@@ -78,18 +94,25 @@ def test_missing_evidence_is_sent_back(stack, db_file):
 
 
 def test_hallucinated_evidence_id_is_rejected(stack, db_file):
-    orch, run_id, _ = stack("s1_modify_open_po_ignored",
-                            facts() + [call("submit_decision", decision(500, evidence=("call_made_up",))),
-                                       call("submit_decision", decision(500))])
+    orch, run_id, _ = stack(
+        "s1_modify_open_po_ignored",
+        facts()
+        + [call("submit_decision", decision(500, evidence=("call_made_up",))), call("submit_decision", decision(500))],
+    )
     orch.run(run_id)
     assert steps_of(db_file, run_id, "gate")[0].payload["unknown_evidence_ids"] == ["call_made_up"]
 
 
 def test_invalid_json_and_schema_errors_are_recoverable(stack, db_file):
-    orch, run_id, _ = stack("s1_modify_open_po_ignored", facts() + [
-        call("submit_decision", "{not json"),
-        call("submit_decision", {"type": "modify", "lines": [], "reasons": [], "summary": "x"}),
-        call("submit_decision", decision(500))])
+    orch, run_id, _ = stack(
+        "s1_modify_open_po_ignored",
+        facts()
+        + [
+            call("submit_decision", "{not json"),
+            call("submit_decision", {"type": "modify", "lines": [], "reasons": [], "summary": "x"}),
+            call("submit_decision", decision(500)),
+        ],
+    )
     run = orch.run(run_id)
     assert run.status == "completed"
     assert len(steps_of(db_file, run_id, "gate")) >= 2
@@ -110,15 +133,20 @@ def test_tool_budget_is_enforced(stack):
 
 
 def test_unknown_tool_does_not_crash(stack, db_file):
-    orch, run_id, _ = stack("s1_accept", [call("place_order_directly", {"qty": 9999})] + facts()
-                            + [call("submit_decision", decision(760, typ="accept"))])
+    orch, run_id, _ = stack(
+        "s1_accept",
+        [call("place_order_directly", {"qty": 9999})]
+        + facts()
+        + [call("submit_decision", decision(760, typ="accept"))],
+    )
     run = orch.run(run_id)
     assert run.status == "completed" and [p.qty_ordered for p in pos(db_file)] == [760]
 
 
 def test_pause_for_approval_then_resume(stack, db_file):
-    orch, run_id, deps = stack("s4_budget_partial_needs_approval",
-                               facts() + [call("submit_decision", decision(760, typ="accept"))])
+    orch, run_id, deps = stack(
+        "s4_budget_partial_needs_approval", facts() + [call("submit_decision", decision(760, typ="accept"))]
+    )
     run = orch.run(run_id)
     assert run.status == "awaiting_approval" and pos(db_file) == []  # nothing ordered before a human says yes
     with read_write(db_file) as s:
@@ -130,8 +158,9 @@ def test_pause_for_approval_then_resume(stack, db_file):
 
 
 def test_human_edit_is_still_checked_by_hard_rules(stack, db_file):
-    orch, run_id, deps = stack("s4_budget_partial_needs_approval",
-                               facts() + [call("submit_decision", decision(760, typ="accept"))])
+    orch, run_id, deps = stack(
+        "s4_budget_partial_needs_approval", facts() + [call("submit_decision", decision(760, typ="accept"))]
+    )
     orch.run(run_id)
     with read_write(db_file) as s:
         approval = s.exec(select(m.Approval)).one()
@@ -141,9 +170,14 @@ def test_human_edit_is_still_checked_by_hard_rules(stack, db_file):
 
 
 def test_human_rejection_goes_back_to_the_agent(stack, db_file):
-    orch, run_id, deps = stack("s4_budget_partial_needs_approval",
-                               facts() + [call("submit_decision", decision(760, typ="accept")),
-                                          call("escalate", {"reason": "buyer refused the budget exception"})])
+    orch, run_id, deps = stack(
+        "s4_budget_partial_needs_approval",
+        facts()
+        + [
+            call("submit_decision", decision(760, typ="accept")),
+            call("escalate", {"reason": "buyer refused the budget exception"}),
+        ],
+    )
     orch.run(run_id)
     with read_write(db_file) as s:
         approval = s.exec(select(m.Approval)).one()
@@ -155,8 +189,10 @@ def test_human_rejection_goes_back_to_the_agent(stack, db_file):
 
 def test_tool_call_written_as_text_is_recovered():
     from write_api.llm.openai_compat import _calls_from_text
-    calls = _calls_from_text('Sure. {"name": "get_inventory", "arguments": {"node": "CHAP"}} done',
-                             {"get_inventory", "submit_decision"})
+
+    calls = _calls_from_text(
+        'Sure. {"name": "get_inventory", "arguments": {"node": "CHAP"}} done', {"get_inventory", "submit_decision"}
+    )
     assert [(c.name, c.arguments) for c in calls] == [("get_inventory", '{"node": "CHAP"}')]
     assert _calls_from_text('{"name": "rm_rf", "arguments": {}}', {"get_inventory"}) == []
 
@@ -164,6 +200,9 @@ def test_tool_call_written_as_text_is_recovered():
 def test_provider_extra_fields_round_trip():
     from write_api.agent.orchestrator import _assistant_message
     from write_api.llm.client import LLMResponse, ToolCall
+
     sig = {"extra_content": {"google": {"thought_signature": "abc"}}}
-    msg = _assistant_message(LLMResponse(tool_calls=[ToolCall(id="c1", name="get_inventory", arguments="{}", extra=sig)]))
+    msg = _assistant_message(
+        LLMResponse(tool_calls=[ToolCall(id="c1", name="get_inventory", arguments="{}", extra=sig)])
+    )
     assert msg["tool_calls"][0]["extra_content"] == sig["extra_content"]  # sent back unchanged next turn

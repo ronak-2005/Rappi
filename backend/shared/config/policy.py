@@ -10,8 +10,6 @@ from shared.config.settings import get_settings
 
 class Planning(BaseModel):
     service_level_z: float = 1.65
-    default_review_period_days: int = 7
-    accept_tolerance_pct: float = 5
     shelf_life_sell_buffer_days: int = 1
 
 

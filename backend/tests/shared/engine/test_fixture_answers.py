@@ -35,8 +35,8 @@ def test_s1_modify_open_po_ignored():
     b = best("s1_modify_open_po_ignored")
     assert b.total_qty == 500 and b.hard_ok and not b.soft_issues
     rec = by_id("s1_modify_open_po_ignored", "as_recommended")
-    assert not rec.checks["capacity"]            # 400 + 800 = 1200 L > 900 L on day 3
-    assert "budget" in rec.soft_issues           # 960 > 700
+    assert not rec.checks["capacity"]  # 400 + 800 = 1200 L > 900 L on day 3
+    assert "budget" in rec.soft_issues  # 960 > 700
     assert b.end_close == 200
 
 
@@ -95,12 +95,13 @@ def test_s4_moq_exceeds_shelf_life_has_no_clean_option():
 def test_partial_confirmation_replan_numbers():
     """s4_feedback_partial_confirm: after SUP_A confirms 250 of 500, the gap is ~207 → 220 from SUP_B."""
     from shared.domain.planning import Receipt
+
     ctx = ctx_from_fixture("s4_feedback_partial_confirm")
     first = evaluate_plan(ctx, POLICY, Plan(lines=[PlanLine(supplier_id="SUP_A", qty=500)]))
     assert first.hard_ok and not first.soft_issues
     ctx.open_receipts.append(Receipt(day=3, qty=250, remaining_shelf_life_days=12, source="PO-new"))
     after_partial = evaluate_plan(ctx, POLICY, Plan())
-    assert after_partial.lost_units == 50                       # → verification UNACCEPTABLE
+    assert after_partial.lost_units == 50  # → verification UNACCEPTABLE
     ctx.budget_remaining = 700 - 300
     req = requirement(ctx, POLICY)
     assert req.net_requirement == 207

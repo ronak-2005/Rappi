@@ -5,6 +5,7 @@ import { writeApi } from '../api/write'
 import { Badge } from '../components/common/Badge'
 import { ErrorBox } from '../components/common/ErrorBox'
 import type { FixtureSummary, RunSummary } from '../types/api'
+import { capitalize } from '../format'
 
 const GROUPS: { id: string; title: string; text: string }[] = [
   { id: 'S1', title: 'Review a recommendation', text: 'The replenishment system proposes an order. Is it right?' },
@@ -107,7 +108,7 @@ export function ScenarioLauncher({ go }: { go: (hash: string) => void }) {
               <tr key={r.id}>
                 <td><a href={`#/runs/${r.id}`}>{fixtures.find((f) => f.id === r.fixture_id)?.title ?? r.fixture_id}</a></td>
                 <td>{r.llm_mode === 'live' ? r.llm_model : 'Rules only'}</td>
-                <td>{r.decision_type ? r.decision_type.charAt(0).toUpperCase() + r.decision_type.slice(1) : '—'}</td>
+                <td>{r.decision_type ? capitalize(r.decision_type) : '—'}</td>
                 <td><Badge value={r.status} /></td>
                 <td className="muted">{new Date(r.started_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
               </tr>

@@ -73,7 +73,9 @@ def test_s3_promo_spike_temporary(world, db_file):
     world("s3_promo_spike_temporary")
     sig = signal(db_file)
     assert sig.classification == "promotion"
-    assert sig.suggested_assumption == DemandAssumption(per_day=160, until_day=1, reason=sig.suggested_assumption.reason)
+    assert sig.suggested_assumption == DemandAssumption(
+        per_day=160, until_day=1, reason=sig.suggested_assumption.reason
+    )
     assert requirement(ctx(db_file, sig.suggested_assumption), POLICY).net_requirement == -33
     overreact = requirement(ctx(db_file, DemandAssumption(per_day=160)), POLICY)
     assert overreact.net_requirement == 507

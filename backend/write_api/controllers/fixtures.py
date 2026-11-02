@@ -14,7 +14,7 @@ router = APIRouter(tags=["fixtures"])
 def load(fixture_id: str, db=Depends(db_file), supplier: SupplierClient = Depends(supplier_client)):
     try:
         fx = fixture_service.load_world(fixture_id, db, supplier)
-    except FileNotFoundError:
-        raise NotFoundError("fixture", fixture_id, "write_api.controllers.fixtures")
+    except FileNotFoundError as exc:
+        raise NotFoundError("fixture", fixture_id, "write_api.controllers.fixtures") from exc
     rec = fx.trigger.recommendation
     return {"loaded": fx.id, "today": fx.today.isoformat(), "recommendation_id": rec.id if rec else None}

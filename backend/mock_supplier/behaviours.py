@@ -8,7 +8,7 @@ a retry with the same idempotency key gets the stored confirmation.
 
 import math
 from datetime import date, timedelta
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -17,7 +17,7 @@ class Behaviour(BaseModel):
     mode: Literal["confirm", "partial", "reject", "delay", "timeout_once", "price_change"] = "confirm"
     ratio: float = 1.0
     delay_days: int = 0
-    new_unit_cost: Optional[float] = None
+    new_unit_cost: float | None = None
     apply_to: Literal["first", "all"] = "all"
 
 
@@ -46,8 +46,15 @@ def respond(order: OrderIn, behaviour: Behaviour, order_number: int) -> tuple[Or
     """Returns (response, simulate_timeout). order_number = how many orders this supplier got before."""
     b = behaviour if (behaviour.apply_to == "all" or order_number == 0) else Behaviour()
     sid = f"{order.supplier_id}-{order_number + 1:04d}"
-    out = OrderOut(supplier_order_id=sid, po_id=order.po_id, status="confirmed", qty_confirmed=order.qty,
-                   delivery_date=order.requested_delivery, unit_cost=order.unit_cost, message="Confirmed in full.")
+    out = OrderOut(
+        supplier_order_id=sid,
+        po_id=order.po_id,
+        status="confirmed",
+        qty_confirmed=order.qty,
+        delivery_date=order.requested_delivery,
+        unit_cost=order.unit_cost,
+        message="Confirmed in full.",
+    )
     if b.mode == "partial":
         qty = math.floor(order.qty * b.ratio)
         out.status, out.qty_confirmed = "partially_confirmed", qty

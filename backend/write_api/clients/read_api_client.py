@@ -26,8 +26,10 @@ class ReadApiClient:
                 msg = err.get("message", r.text)
             except ValueError:
                 msg = r.text
-            raise ReadApiError(f"read_api {r.request.method} {r.request.url.path} → {r.status_code}: {msg}",
-                               "write_api.clients.read_api_client")
+            raise ReadApiError(
+                f"read_api {r.request.method} {r.request.url.path} → {r.status_code}: {msg}",
+                "write_api.clients.read_api_client",
+            )
         return r.json()
 
     def get(self, path: str, **params) -> dict:

@@ -7,9 +7,7 @@ import {
   Bar, CartesianGrid, ComposedChart, LabelList, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import type { Projection } from '../../types/api'
-
-const fmtDay = (iso: string) =>
-  new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+import { shortDay } from '../../format'
 
 interface Row {
   date: string
@@ -39,7 +37,7 @@ function TooltipBox({ active, payload }: { active?: boolean; payload?: { payload
 export function ProjectionChart({ projection, title, note }: { projection: Projection; title: string; note?: string }) {
   const [asTable, setAsTable] = useState(false)
   const rows: Row[] = projection.days.map((d) => ({
-    date: d.date, label: fmtDay(d.date), stock: Math.round(d.available), lost: Math.round(d.lost),
+    date: d.date, label: shortDay(d.date), stock: Math.round(d.available), lost: Math.round(d.lost),
     received: Math.round(d.receipts ?? 0), close: Math.round(d.close),
     limit: Math.round(d.free_l),
   }))

@@ -1,7 +1,7 @@
 PY      := backend/.venv/bin/python
 PIP     := backend/.venv/bin/pip
 
-.PHONY: setup dev test smoke eval llm-check llm-models build-frontend clean
+.PHONY: setup dev test lint smoke eval llm-check llm-models build-frontend clean
 
 ## Install backend (venv) and frontend (npm) dependencies; create env files if missing
 setup:
@@ -18,6 +18,11 @@ dev:
 ## Unit, API, agent (scripted LLM) and architecture tests — no API key needed
 test:
 	cd backend && .venv/bin/pytest -q
+
+## Lint + format check: ruff (backend) and oxlint (frontend)
+lint:
+	cd backend && .venv/bin/ruff check . && .venv/bin/ruff format --check .
+	cd frontend && npm run lint
 
 ## Start the real services, run one scenario with the no-key baseline, print the outcome
 smoke:

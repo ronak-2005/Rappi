@@ -6,10 +6,17 @@ the integration tests and the evals.
 """
 
 from datetime import date
-from typing import Literal, Optional
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel, Field, model_validator
+
+
+def _exactly_one_series(spec, what: str):
+    """A series is given either as a constant per day or as an explicit daily list, never both or neither."""
+    if (spec.units_per_day is None) == (spec.daily is None):
+        raise ValueError(f"{what} needs exactly one of units_per_day or daily")
+    return spec
 
 
 class NodeSpec(BaseModel):
@@ -44,37 +51,33 @@ class InventorySpec(BaseModel):
     sku: str
     on_hand: int
     last_counted_days_ago: int = 0
-    remaining_shelf_life_days: Optional[int] = None
+    remaining_shelf_life_days: int | None = None
 
 
 class ForecastSpec(BaseModel):
     node: str
     sku: str
     sigma: float
-    units_per_day: Optional[float] = None
-    daily: Optional[list[float]] = None  # day 0 (today) onwards
+    units_per_day: float | None = None
+    daily: list[float] | None = None  # day 0 (today) onwards
     days: int = 30
 
     @model_validator(mode="after")
     def _one_of(self):
-        if (self.units_per_day is None) == (self.daily is None):
-            raise ValueError("forecast needs exactly one of units_per_day or daily")
-        return self
+        return _exactly_one_series(self, "forecast")
 
 
 class SalesSpec(BaseModel):
     node: str
     sku: str
-    units_per_day: Optional[int] = None
-    daily: Optional[list[int]] = None  # oldest → yesterday
+    units_per_day: int | None = None
+    daily: list[int] | None = None  # oldest → yesterday
     days: int = 14
     stocked_out_days_ago: list[int] = Field(default_factory=list)  # 1 = yesterday
 
     @model_validator(mode="after")
     def _one_of(self):
-        if (self.units_per_day is None) == (self.daily is None):
-            raise ValueError("sales_history needs exactly one of units_per_day or daily")
-        return self
+        return _exactly_one_series(self, "sales_history")
 
 
 class SupplierSpec(BaseModel):
@@ -96,10 +99,10 @@ class TermSpec(BaseModel):
     moq: int = 1
     case_pack: int = 1
     lead_time_days: int
-    express_lead_days: Optional[int] = None
+    express_lead_days: int | None = None
     express_premium_per_unit: float = 0.0
     max_qty: int = 1_000_000
-    remaining_shelf_life_days: Optional[int] = None
+    remaining_shelf_life_days: int | None = None
 
 
 class OpenPOSpec(BaseModel):
@@ -112,9 +115,9 @@ class OpenPOSpec(BaseModel):
     arrives_in_days: int
     ordered_days_ago: int = 1
     status: Literal["sent", "confirmed", "partially_confirmed"] = "confirmed"
-    qty_confirmed: Optional[int] = None
+    qty_confirmed: int | None = None
     mode: Literal["standard", "express"] = "standard"
-    remaining_shelf_life_days: Optional[int] = None
+    remaining_shelf_life_days: int | None = None
 
 
 class BudgetSpec(BaseModel):
@@ -153,7 +156,7 @@ class RecommendationSpec(BaseModel):
     node: str
     sku: str
     qty: int
-    supplier: Optional[str] = None  # supplier the recommending system assumed
+    supplier: str | None = None  # supplier the recommending system assumed
     source: str = "replenishment_engine"
 
 
@@ -174,9 +177,9 @@ class DemandAlertSpec(BaseModel):
 
 class TriggerSpec(BaseModel):
     type: Literal["recommendation", "supplier_event", "demand_alert"]
-    recommendation: Optional[RecommendationSpec] = None
-    supplier_event: Optional[SupplierEventSpec] = None
-    demand_alert: Optional[DemandAlertSpec] = None
+    recommendation: RecommendationSpec | None = None
+    supplier_event: SupplierEventSpec | None = None
+    demand_alert: DemandAlertSpec | None = None
 
     @property
     def ref(self) -> str:
@@ -185,30 +188,32 @@ class TriggerSpec(BaseModel):
 
 class BehaviourSpec(BaseModel):
     """How the mock supplier answers new purchase orders."""
+
     mode: Literal["confirm", "partial", "reject", "delay", "timeout_once", "price_change"] = "confirm"
     ratio: float = 1.0  # partial: share of qty confirmed
     delay_days: int = 0
-    new_unit_cost: Optional[float] = None
+    new_unit_cost: float | None = None
     apply_to: Literal["first", "all"] = "all"  # 'first' = only the first PO to this supplier behaves this way
 
 
 class ExpectedSpec(BaseModel):
     """Hand-computed ground truth used by graders. See `notes` for the arithmetic."""
+
     decision: list[Literal["accept", "modify", "reject", "investigate", "escalate"]]
-    qty_range: Optional[tuple[int, int]] = None  # total PURCHASED qty across all order lines
-    lines: Optional[int] = None
-    transfers: Optional[int] = None  # number of transfer lines in the decision
-    transfer_qty_range: Optional[tuple[int, int]] = None
-    demand_per_day_range: Optional[tuple[float, float]] = None  # the demand assumption the decision should use
-    supplier: Optional[str] = None  # expected supplier when it matters (single-line decisions)
-    replan_qty_range: Optional[tuple[int, int]] = None  # extra qty ordered after a failed verification
+    qty_range: tuple[int, int] | None = None  # total PURCHASED qty across all order lines
+    lines: int | None = None
+    transfers: int | None = None  # number of transfer lines in the decision
+    transfer_qty_range: tuple[int, int] | None = None
+    demand_per_day_range: tuple[float, float] | None = None  # the demand assumption the decision should use
+    supplier: str | None = None  # expected supplier when it matters (single-line decisions)
+    replan_qty_range: tuple[int, int] | None = None  # extra qty ordered after a failed verification
     required_tools: list[str] = Field(default_factory=list)
-    approval_required: Optional[bool] = None
+    approval_required: bool | None = None
     approval_response: Literal["approve", "reject"] = "approve"
-    pos_created: Optional[int] = None
-    supplier_orders: Optional[int] = None
+    pos_created: int | None = None
+    supplier_orders: int | None = None
     final_verification: list[str] = Field(default_factory=list)
-    recovery: Optional[Literal["replan", "escalate"]] = None
+    recovery: Literal["replan", "escalate"] | None = None
     key_factors: list[str] = Field(default_factory=list)
     notes: str = ""
 
@@ -232,6 +237,7 @@ def parse_fixture(text: str) -> FixtureSpec:
 
 def fixtures_dir():
     from shared.config.settings import get_settings
+
     settings = get_settings()
     return settings.resolve(settings.fixtures_dir)
 

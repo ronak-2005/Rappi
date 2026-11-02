@@ -9,5 +9,9 @@ def check(i: RuleInput) -> RuleResult:
     if not i.transfers:
         return RuleResult(rule="transfer_source", kind="hard", passed=True, message="no transfers")
     problems = [n for n in i.evaluation.notes if n.startswith("transfer")]
-    return RuleResult(rule="transfer_source", kind="hard", passed=ok,
-                      message="transfers within the other stores' surplus" if ok else "; ".join(problems))
+    return RuleResult(
+        rule="transfer_source",
+        kind="hard",
+        passed=ok,
+        message="transfers within the other stores' surplus" if ok else "; ".join(problems),
+    )

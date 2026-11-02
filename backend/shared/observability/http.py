@@ -5,12 +5,20 @@ import time
 import uuid
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from shared.domain.errors import DomainError
 from shared.observability.logging import request_id_var, run_id_var
 
 log = logging.getLogger("shared.observability.http")
+
+
+def install_common(app: FastAPI, service: str, cors_origins: str) -> None:
+    """Everything both APIs need: CORS for the UI, request ids + timing logs, JSON error responses."""
+    app.add_middleware(CORSMiddleware, allow_origins=cors_origins.split(","), allow_methods=["*"], allow_headers=["*"])
+    install_request_context(app)
+    install_error_handlers(app, service)
 
 
 def install_request_context(app: FastAPI) -> None:
@@ -22,20 +30,37 @@ def install_request_context(app: FastAPI) -> None:
         start = time.perf_counter()
         response = await call_next(request)
         response.headers["x-request-id"] = rid
-        log.info("%s %s → %s (%.0f ms)", request.method, request.url.path, response.status_code,
-                 (time.perf_counter() - start) * 1000)
+        log.info(
+            "%s %s → %s (%.0f ms)",
+            request.method,
+            request.url.path,
+            response.status_code,
+            (time.perf_counter() - start) * 1000,
+        )
         return response
 
 
 def install_error_handlers(app: FastAPI, service: str) -> None:
     @app.exception_handler(DomainError)
     async def _domain(_: Request, exc: DomainError):
-        return JSONResponse(status_code=exc.status, content={"error": {
-            "code": exc.code, "service": service, "component": exc.component, "message": exc.message}})
+        return JSONResponse(
+            status_code=exc.status,
+            content={
+                "error": {"code": exc.code, "service": service, "component": exc.component, "message": exc.message}
+            },
+        )
 
     @app.exception_handler(Exception)
     async def _unexpected(request: Request, exc: Exception):
         log.exception("unhandled error on %s", request.url.path)
-        return JSONResponse(status_code=500, content={"error": {
-            "code": "internal_error", "service": service, "component": type(exc).__module__,
-            "message": f"{type(exc).__name__}: {exc}"}})
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": {
+                    "code": "internal_error",
+                    "service": service,
+                    "component": type(exc).__module__,
+                    "message": f"{type(exc).__name__}: {exc}",
+                }
+            },
+        )

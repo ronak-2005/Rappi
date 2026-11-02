@@ -4,9 +4,9 @@ from sqlmodel import select
 
 from shared.config.policy import load_policy
 from shared.db import models as m
+from shared.db import snapshot
 from shared.db.session import read_write
 from shared.domain.planning import Plan, PlanLine
-from shared.db import snapshot
 from shared.engine.options import evaluate_plan
 from write_api.actions import gateway
 from write_api.verification import learning, verifier
@@ -17,10 +17,12 @@ POLICY = load_policy()
 def execute_and_verify(db_file, supplier, lines, rec, node="CHAP", sku="MILK1L", tag="plan-0"):
     with read_write(db_file) as s:
         expected = evaluate_plan(snapshot.build_context(s, node, sku, rec), POLICY, Plan(lines=lines))
-        result = gateway.execute(s, supplier, run_id="RUN-T", attempt_tag=tag, node=node, sku=sku, lines=lines,
-                                 recommendation_id=rec)
-        report = verifier.verify(s, POLICY, node=node, sku=sku, expected=expected, execution=result,
-                                 recommendation_id=rec)
+        result = gateway.execute(
+            s, supplier, run_id="RUN-T", attempt_tag=tag, node=node, sku=sku, lines=lines, recommendation_id=rec
+        )
+        report = verifier.verify(
+            s, POLICY, node=node, sku=sku, expected=expected, execution=result, recommendation_id=rec
+        )
         stats = learning.record(s, result)
         return result, report, stats
 

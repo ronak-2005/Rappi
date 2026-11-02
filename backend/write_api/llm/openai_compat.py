@@ -18,13 +18,19 @@ log = logging.getLogger("write_api.llm.openai_compat")
 class OpenAICompatClient:
     def __init__(self, settings: LLMSettings):
         if not settings.llm_base_url or not settings.llm_model:
-            raise ConfigurationError("live LLM not configured: set LLM_BASE_URL, LLM_API_KEY and LLM_MODEL in "
-                                     "backend/llm.env, or run with llm_mode=baseline", "write_api.llm.openai_compat")
+            raise ConfigurationError(
+                "live LLM not configured: set LLM_BASE_URL, LLM_API_KEY and LLM_MODEL in "
+                "backend/llm.env, or run with llm_mode=baseline",
+                "write_api.llm.openai_compat",
+            )
         self.settings = settings
         self.model = settings.llm_model
-        self._client = OpenAI(base_url=settings.llm_base_url, api_key=settings.llm_api_key or "none",
-                              timeout=settings.llm_timeout_s,
-                              max_retries=settings.llm_max_retries)  # SDK backs off on 429/5xx, honours Retry-After
+        self._client = OpenAI(
+            base_url=settings.llm_base_url,
+            api_key=settings.llm_api_key or "none",
+            timeout=settings.llm_timeout_s,
+            max_retries=settings.llm_max_retries,
+        )  # SDK backs off on 429/5xx, honours Retry-After
 
     _lock = threading.Lock()
     _last_call = 0.0
@@ -52,16 +58,27 @@ class OpenAICompatClient:
                 wait = min(60, 15 * (attempt + 1))
                 log.warning("rate limited (per-minute); waiting %ss before retry %d", wait, attempt + 1)
                 time.sleep(wait)
+        raise AssertionError("unreachable: the last attempt either returns or raises")
 
     def chat(self, messages: list[dict], tools: list[dict]) -> LLMResponse:
         resp = self._create(
-            model=self.model, messages=messages, tools=tools or None, tool_choice="auto" if tools else None,
-            temperature=self.settings.llm_temperature, max_tokens=self.settings.llm_max_tokens,
+            model=self.model,
+            messages=messages,
+            tools=tools or None,
+            tool_choice="auto" if tools else None,
+            temperature=self.settings.llm_temperature,
+            max_tokens=self.settings.llm_max_tokens,
         )
         msg = resp.choices[0].message
-        calls = [ToolCall(id=tc.id or f"call_{i}", name=tc.function.name, arguments=tc.function.arguments or "{}",
-                          extra=_extra_fields(tc))
-                 for i, tc in enumerate(msg.tool_calls or [])]
+        calls = [
+            ToolCall(
+                id=tc.id or f"call_{i}",
+                name=tc.function.name,
+                arguments=tc.function.arguments or "{}",
+                extra=_extra_fields(tc),
+            )
+            for i, tc in enumerate(msg.tool_calls or [])
+        ]
         text = msg.content or ""
         if not calls and tools:
             calls = _calls_from_text(text, {t["function"]["name"] for t in tools})
@@ -84,14 +101,20 @@ def _calls_from_text(text: str, tool_names: set[str]) -> list[ToolCall]:
     still validated by the tool registry like any other call."""
     import json
     import re
+
     out, decoder = [], json.JSONDecoder()
     for m in re.finditer(r"\{", text):
         try:
-            obj, _ = decoder.raw_decode(text[m.start():])
+            obj, _ = decoder.raw_decode(text[m.start() :])
         except ValueError:
             continue
         if isinstance(obj, dict) and obj.get("name") in tool_names:
             args = obj.get("arguments", obj.get("parameters", {}))
-            out.append(ToolCall(id=f"textcall_{len(out)}", name=obj["name"],
-                                arguments=args if isinstance(args, str) else json.dumps(args)))
+            out.append(
+                ToolCall(
+                    id=f"textcall_{len(out)}",
+                    name=obj["name"],
+                    arguments=args if isinstance(args, str) else json.dumps(args),
+                )
+            )
     return out[:1]  # one at a time: keeps the conversation well-formed

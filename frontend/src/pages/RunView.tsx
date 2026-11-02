@@ -7,19 +7,18 @@ import { ApprovalPanel } from '../components/approvals/ApprovalPanel'
 import { ProjectionChart } from '../components/charts/ProjectionChart'
 import { Badge } from '../components/common/Badge'
 import { ErrorBox } from '../components/common/ErrorBox'
-import { TOOL_WORDS, TraceTimeline } from '../components/trace/TraceTimeline'
+import { TraceTimeline } from '../components/trace/TraceTimeline'
 import { RuleList } from '../components/validation/RuleList'
 import { useRunStream } from '../hooks/useRunStream'
 import type { Decision, Projection, RunDetail, TraceStep } from '../types/api'
-
-const day = (iso: string) => new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+import { humanize, shortDay, TOOL_WORDS } from '../format'
 
 function verdict(run: RunDetail, d: Decision | null, names: Record<string, string>): string {
   if (!d) return run.status === 'failed' ? 'The run failed before a decision' : 'Working on it…'
   const name = (id: string) => names[id] ?? id
   const arrival = (supplier: string, qty: number) => {
     const po = run.purchase_orders.find((p) => p.supplier_id === supplier && p.qty_ordered === qty)
-    return po ? `, arriving ${day(po.expected_delivery)}` : ''
+    return po ? `, arriving ${shortDay(po.expected_delivery)}` : ''
   }
   const parts = [
     ...(d.lines ?? []).map((l) => `buy ${l.qty} from ${name(l.supplier_id)}${l.mode === 'express' ? ' by express' : ''}${arrival(l.supplier_id, l.qty)}`),
@@ -73,11 +72,15 @@ export function RunView({ runId }: { runId: string }) {
     readApi.fixtures().then((fx) => setTitle(fx.find((f) => f.id === run.fixture_id)?.title ?? '')).catch(() => {})
   }, [run?.context?.sku, run?.fixture_id])
 
+  const node = run?.context?.node
+  const sku = run?.context?.sku
+  const recId = run?.context?.recommendation_id
+  const acted = !!(run?.purchase_orders.length || run?.transfers?.length)
   useEffect(() => {  // after the suppliers answered: the stock picture as it really is now
-    if (run?.finished && (run.purchase_orders.length || run.transfers?.length) && run.context?.node) {
-      readApi.projection(run.context.node, run.context.sku, [], run.context.recommendation_id).then(setActual).catch(() => {})
+    if (run?.finished && acted && node && sku) {
+      readApi.projection(node, sku, [], recId).then(setActual).catch(() => {})
     }
-  }, [run?.finished, run?.purchase_orders.length, run?.transfers?.length])
+  }, [run?.finished, acted, node, sku, recId])
 
   if (!run) return <><ErrorBox error={error} /><p className="muted">Loading run…</p></>
 
@@ -136,7 +139,7 @@ export function RunView({ runId }: { runId: string }) {
               <ul className="reasons">
                 {decision.reasons.map((r, i) => (
                   <li key={i}>
-                    <span className="factor">{r.factor.replaceAll('_', ' ')}</span>. {r.finding}
+                    <span className="factor">{humanize(r.factor)}</span>. {r.finding}
                     {!!r.evidence?.length && <span className="evidence" title="Tool results this reason is based on">
                       {[...new Set(r.evidence.map((e) => evidenceName[e] ?? 'a tool result'))].map((n) => <span key={n}>{n}</span>)}</span>}
                   </li>
@@ -168,7 +171,7 @@ export function RunView({ runId }: { runId: string }) {
                 {run.purchase_orders.map((p) => (
                   <li key={p.id}>
                     <div className="row"><strong>{names[p.supplier_id] ?? p.supplier_id}</strong><Badge value={p.status} /></div>
-                    <div className="small">Ordered {p.qty_ordered}, confirmed {p.qty_confirmed ?? '—'}, arriving {day(p.expected_delivery)}</div>
+                    <div className="small">Ordered {p.qty_ordered}, confirmed {p.qty_confirmed ?? '—'}, arriving {shortDay(p.expected_delivery)}</div>
                     {p.notes && <div className="small muted">“{p.notes}”</div>}
                     <div className="small muted">{p.id}</div>
                   </li>
@@ -176,7 +179,7 @@ export function RunView({ runId }: { runId: string }) {
                 {run.transfers?.map((t) => (
                   <li key={t.id}>
                     <div className="row"><strong>Transfer from {t.from_node}</strong><Badge value={t.status} /></div>
-                    <div className="small">{t.qty} units, arriving {day(t.eta)}</div>
+                    <div className="small">{t.qty} units, arriving {shortDay(t.eta)}</div>
                   </li>
                 ))}
               </ul>

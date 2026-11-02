@@ -16,8 +16,10 @@ from write_api.services.run_service import llm_health
 def main(argv: list[str]) -> int:
     env = argv[0] if argv and not argv[0].startswith("--") else "llm.env"
     s = load_llm_settings(env)
-    print(f"env: {env}\nbase_url: {s.llm_base_url}\nmodel: {s.llm_model or '(not set)'}\n"
-          f"api key set: {bool(s.llm_api_key)}")
+    print(
+        f"env: {env}\nbase_url: {s.llm_base_url}\nmodel: {s.llm_model or '(not set)'}\n"
+        f"api key set: {bool(s.llm_api_key)}"
+    )
     if "--models" in argv:
         client = OpenAI(base_url=s.llm_base_url, api_key=s.llm_api_key or "none", timeout=30)
         for m in sorted(client.models.list(), key=lambda m: m.id):

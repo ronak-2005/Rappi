@@ -2,7 +2,6 @@
 
 import asyncio
 import json
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Request
 from sqlmodel import Session
@@ -57,7 +56,7 @@ async def run_stream(run_id: str, request: Request):
 
 
 @router.get("/approvals")
-def approvals(status: Optional[str] = None, s: Session = Depends(session)):
+def approvals(status: str | None = None, s: Session = Depends(session)):
     return v.approvals(s, status)
 
 

@@ -2,11 +2,11 @@
 exact paths (missing evidence, invalid JSON, rulebook rejection ...) at zero cost."""
 
 import json
-from typing import Callable, Union
+from collections.abc import Callable
 
 from write_api.llm.client import LLMResponse, ToolCall
 
-Step = Union[LLMResponse, Callable[[list[dict]], LLMResponse]]
+Step = LLMResponse | Callable[[list[dict]], LLMResponse]
 
 
 def call(name: str, args: dict | str | None = None, id_: str | None = None) -> LLMResponse:

@@ -2,7 +2,7 @@
 (roles: system / user / assistant with tool_calls / tool with tool_call_id)."""
 
 from dataclasses import dataclass, field
-from typing import Optional, Protocol
+from typing import Protocol
 
 
 @dataclass
@@ -18,7 +18,7 @@ class LLMResponse:
     text: str = ""
     tool_calls: list[ToolCall] = field(default_factory=list)
     usage: dict = field(default_factory=dict)
-    raw: Optional[dict] = None
+    raw: dict | None = None
 
 
 class LLMClient(Protocol):
