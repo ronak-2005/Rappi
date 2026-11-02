@@ -18,4 +18,5 @@ export const readApi = {
       body: JSON.stringify({ plan: { lines }, recommendation_id: recommendationId ?? null }),
     }),
   evals: () => get<Record<string, any>>('/evals/latest'),
+  suppliers: (sku: string) => get<{ suppliers: { supplier_id: string; supplier_name: string }[] }>(`/skus/${sku}/suppliers`),
 }

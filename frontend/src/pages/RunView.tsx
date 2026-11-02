@@ -1,5 +1,5 @@
-// One agent run, live: what it looked at, what it decided, what the rulebook said, what was ordered,
-// what the supplier answered, and whether the result was verified.
+// One agent run. The verdict leads; everything below explains it: the stock picture, the reasons,
+// the rule check, the orders and what the suppliers answered, and the full sequence of what the agent did.
 import { useEffect, useMemo, useState } from 'react'
 import { readApi } from '../api/read'
 import { writeApi } from '../api/write'
@@ -7,25 +7,73 @@ import { ApprovalPanel } from '../components/approvals/ApprovalPanel'
 import { ProjectionChart } from '../components/charts/ProjectionChart'
 import { Badge } from '../components/common/Badge'
 import { ErrorBox } from '../components/common/ErrorBox'
-import { TraceTimeline } from '../components/trace/TraceTimeline'
+import { TOOL_WORDS, TraceTimeline } from '../components/trace/TraceTimeline'
 import { RuleList } from '../components/validation/RuleList'
 import { useRunStream } from '../hooks/useRunStream'
-import type { Decision, Projection } from '../types/api'
+import type { Decision, Projection, RunDetail, TraceStep } from '../types/api'
+
+const day = (iso: string) => new Date(iso + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
+
+function verdict(run: RunDetail, d: Decision | null, names: Record<string, string>): string {
+  if (!d) return run.status === 'failed' ? 'The run failed before a decision' : 'Working on it…'
+  const name = (id: string) => names[id] ?? id
+  const arrival = (supplier: string, qty: number) => {
+    const po = run.purchase_orders.find((p) => p.supplier_id === supplier && p.qty_ordered === qty)
+    return po ? `, arriving ${day(po.expected_delivery)}` : ''
+  }
+  const parts = [
+    ...(d.lines ?? []).map((l) => `buy ${l.qty} from ${name(l.supplier_id)}${l.mode === 'express' ? ' by express' : ''}${arrival(l.supplier_id, l.qty)}`),
+    ...(d.transfers ?? []).map((t) => `move ${t.qty} from the ${t.from_node} store`),
+  ]
+  if (run.status === 'awaiting_approval' && parts.length) return `Proposed, needs your approval: ${parts.join(' and ')}`
+  const short = run.purchase_orders.find((p) => p.qty_confirmed != null && p.qty_confirmed < p.qty_ordered)
+  if (run.replans > 0 && short && d.type === 'modify') {
+    return `${name(short.supplier_id)} sent ${short.qty_confirmed} of ${short.qty_ordered}, so the agent re-planned: ${parts.join(' and ')}`
+  }
+  switch (d.type) {
+    case 'accept': return parts.length ? `Accept: ${parts.join(' and ')}` : 'Keep the current plan: nothing more to buy'
+    case 'modify': return `Change the plan: ${parts.join(' and ')}`
+    case 'reject': return 'Don’t buy: stock and open orders already cover the need'
+    case 'investigate': return 'Check the stock count first: nothing was bought'
+    case 'escalate': return 'Handed to a buyer: no safe plan was found'
+  }
+}
+
+function triggerText(steps: TraceStep[]): string {
+  const sit = steps.find((s) => s.kind === 'info' && s.name === 'situation')?.payload
+  if (!sit) return ''
+  if (sit.recommendation) return `Recommendation: buy ${sit.recommendation.qty} × ${sit.recommendation.sku} from ${sit.recommendation.supplier}`
+  if (sit.event) return `Supplier message on ${sit.purchase_order?.id}: “${sit.event.message}”`
+  if (sit.alert) return `Demand alert: “${sit.alert.message}”`
+  return ''
+}
 
 export function RunView({ runId }: { runId: string }) {
   const { steps, run, error, refresh } = useRunStream(runId)
   const [actual, setActual] = useState<Projection | null>(null)
+  const [showPlanned, setShowPlanned] = useState(false)
+  const [names, setNames] = useState<Record<string, string>>({})
+  const [title, setTitle] = useState('')
 
   const decision: Decision | null = useMemo(() => {
     const ds = steps.filter((s) => s.kind === 'decision')
-    return (ds.length ? (ds[ds.length - 1].payload as Decision) : null) ?? run?.decision ?? null
+    return run?.decision ?? (ds.length ? (ds[ds.length - 1].payload as Decision) : null)
   }, [steps, run])
   const validation = [...steps].reverse().find((s) => s.kind === 'validation')
   const planned = [...steps].reverse().find((s) => s.kind === 'tool_call' && s.name === 'project_inventory' && s.payload.ok)
   const verifications = steps.filter((s) => s.kind === 'verification')
+  const evidenceName = Object.fromEntries(steps.filter((s) => s.kind === 'tool_call')
+    .map((s) => [s.payload.id, TOOL_WORDS[s.name] ?? s.name]))
   const pending = run?.approvals.find((a) => a.status === 'pending')
 
-  useEffect(() => {  // after the supplier answered: projection of the world as it is now
+  useEffect(() => {
+    if (!run?.context?.sku) return
+    readApi.suppliers(run.context.sku).then((r) =>
+      setNames(Object.fromEntries(r.suppliers.map((s) => [s.supplier_id, s.supplier_name])))).catch(() => {})
+    readApi.fixtures().then((fx) => setTitle(fx.find((f) => f.id === run.fixture_id)?.title ?? '')).catch(() => {})
+  }, [run?.context?.sku, run?.fixture_id])
+
+  useEffect(() => {  // after the suppliers answered: the stock picture as it really is now
     if (run?.finished && (run.purchase_orders.length || run.transfers?.length) && run.context?.node) {
       readApi.projection(run.context.node, run.context.sku, [], run.context.recommendation_id).then(setActual).catch(() => {})
     }
@@ -33,113 +81,120 @@ export function RunView({ runId }: { runId: string }) {
 
   if (!run) return <><ErrorBox error={error} /><p className="muted">Loading run…</p></>
 
+  const chart = actual && !showPlanned
+    ? { p: actual, t: 'Stock by day, with the suppliers’ real answers', n: 'Includes every order and transfer as confirmed.' }
+    : planned ? { p: planned.payload.result as Projection, t: 'Stock by day, if the plan goes as intended', n: 'The agent’s own projection before acting.' } : null
+  const finalV = run.outcome?.final_verification
+
   return (
     <>
+      <a className="back" href="#/">← All scenarios</a>
       <ErrorBox error={error || run.error} />
-      <div className="card">
-        <div className="row">
-          <span className="mono">{run.id}</span>
-          <Badge value={run.status} />
-          <span className="mono muted small">{run.state}</span>
-          <span className="spacer" />
-          <span className="small muted">scenario <span className="mono">{run.fixture_id}</span> · brain <strong>{run.llm_mode === 'live' ? run.llm_model : run.llm_mode}</strong>
-            · {run.tool_calls} tool calls · {run.revisions} revisions · {run.replans} re-plans</span>
-          {!run.finished && run.status !== 'awaiting_approval' && <button onClick={() => writeApi.cancel(run.id).then(refresh)}>Cancel</button>}
-        </div>
-      </div>
 
-      <div className="grid run">
-        <div className="card">
-          <h3>Trace <span className="muted small">(click a step for details)</span></h3>
-          <TraceTimeline steps={steps} />
+      <section className="verdict">
+        <div className="kind">
+          <Badge value={run.status} />
+          <span>{title || run.fixture_id}</span>
+        </div>
+        <h1>{verdict(run, decision, names)}</h1>
+        {decision?.summary && <p className="sub">{decision.summary.replace(/^(accept|modify|reject|investigate|escalate)\s*:\s*/i, '')}</p>}
+        <div className="facts">
+          <span><strong>{triggerText(steps) ? 'Trigger' : 'Run'}</strong>{triggerText(steps) || run.id}</span>
+          <span><strong>Decided by</strong>{run.llm_mode === 'live' ? run.llm_model : 'Rules only (no LLM)'}</span>
+          <span><strong>Tool calls</strong>{run.tool_calls}</span>
+          {run.replans > 0 && <span><strong>Re-plans</strong>{run.replans}</span>}
+          {finalV && <span><strong>Result</strong><Badge value={finalV} /></span>}
+          {!run.finished && run.status !== 'awaiting_approval' &&
+            <span><button onClick={() => writeApi.cancel(run.id).then(refresh)}>Stop this run</button></span>}
+        </div>
+      </section>
+
+      {pending && <ApprovalPanel approval={pending} names={names} onDone={refresh} />}
+
+      {chart && (
+        <section className="section">
+          <ProjectionChart projection={chart.p} title={chart.t} note={chart.n} />
+          {actual && planned && (
+            <button className="link small" onClick={() => setShowPlanned(!showPlanned)}>
+              {showPlanned ? 'Show what really happened' : 'Compare with what the agent planned'}
+            </button>
+          )}
+        </section>
+      )}
+
+      <div className="cols">
+        <div>
+          {!!decision?.reasons?.length && (
+            <section className="section">
+              <h2>Why</h2>
+              {decision.demand_assumption && (
+                <p className="small" style={{ marginBottom: 8 }}>
+                  <Badge value="pending" tone="warn" /> Planned on <strong>{decision.demand_assumption.per_day} a day</strong>
+                  {decision.demand_assumption.until_day != null ? ` until day +${decision.demand_assumption.until_day}, then the forecast` : ' instead of the forecast'}.
+                </p>
+              )}
+              <ul className="reasons">
+                {decision.reasons.map((r, i) => (
+                  <li key={i}>
+                    <span className="factor">{r.factor.replaceAll('_', ' ')}</span>. {r.finding}
+                    {!!r.evidence?.length && <span className="evidence" title="Tool results this reason is based on">
+                      {[...new Set(r.evidence.map((e) => evidenceName[e] ?? 'a tool result'))].map((n) => <span key={n}>{n}</span>)}</span>}
+                  </li>
+                ))}
+              </ul>
+              {!!decision.questions_for_human?.length && (
+                <><h3 style={{ marginTop: 12 }}>Questions for the buyer</h3>
+                  <ul className="small">{decision.questions_for_human.map((q) => <li key={q}>{q}</li>)}</ul></>
+              )}
+            </section>
+          )}
+          <section className="section">
+            <h2>What the agent did</h2>
+            <TraceTimeline steps={steps} />
+          </section>
         </div>
 
         <div>
-          {pending && <ApprovalPanel approval={pending} onDone={refresh} />}
-
-          {decision && (
-            <div className="card">
-              <h3>Decision</h3>
-              <div className="row"><span className="decision-type">{decision.type}</span>
-                {decision.confidence && <Badge value={`confidence ${decision.confidence}`} tone="neutral" />}</div>
-              {decision.summary && <p>{decision.summary}</p>}
-              {!!decision.lines?.length && (
-                <table><thead><tr><th>Supplier</th><th>Qty</th><th>Mode</th><th>Delivery</th></tr></thead>
-                  <tbody>{decision.lines.map((l, i) => (
-                    <tr key={i}><td>{l.supplier_id}</td><td><strong>{l.qty}</strong></td><td>{l.mode}</td>
-                      <td>{l.delivery_day != null ? `day +${l.delivery_day}` : 'earliest'}</td></tr>))}</tbody></table>
-              )}
-              {!!decision.transfers?.length && (
-                <><h4>Transfers from other stores</h4>
-                <table><thead><tr><th>From</th><th>Qty</th></tr></thead>
-                  <tbody>{decision.transfers.map((t, i) => <tr key={i}><td>{t.from_node}</td><td><strong>{t.qty}</strong></td></tr>)}</tbody></table></>
-              )}
-              {decision.demand_assumption && (
-                <p className="small"><Badge value="demand assumption" tone="warn" /> planned on <strong>{decision.demand_assumption.per_day}/day</strong>
-                  {decision.demand_assumption.until_day != null ? ` until day +${decision.demand_assumption.until_day}, then the forecast` : ' for the whole horizon'}
-                  {decision.demand_assumption.reason ? ` — ${decision.demand_assumption.reason}` : ''}</p>
-              )}
-              {!!decision.reasons?.length && <><h4>Why</h4>{decision.reasons.map((r, i) => (
-                <div className="reason" key={i}><strong>{r.factor}</strong>: {r.finding}
-                  {!!r.evidence?.length && <span className="mono muted"> [{r.evidence.join(', ')}]</span>}</div>))}</>}
-              {!!decision.risks?.length && <><h4>Risks</h4><ul className="small">{decision.risks.map((r) => <li key={r}>{r}</li>)}</ul></>}
-              {!!decision.questions_for_human?.length && <><h4>Questions for the buyer</h4>
-                <ul className="small">{decision.questions_for_human.map((q) => <li key={q}>{q}</li>)}</ul></>}
-            </div>
-          )}
-
           {validation && (
-            <div className="card">
-              <h3>Rulebook</h3>
+            <section className="section">
+              <h2>Rule check</h2>
               <RuleList results={validation.payload.results ?? []} />
-            </div>
+            </section>
           )}
-
-          {planned && (
-            <div className="card">
-              <h3>Projection of the chosen plan <span className="muted small">(what the agent saw)</span></h3>
-              <ProjectionChart projection={planned.payload.result as Projection} />
-            </div>
+          {(run.purchase_orders.length > 0 || run.transfers?.length > 0) && (
+            <section className="section">
+              <h2>Orders and what suppliers said</h2>
+              <ul className="reasons">
+                {run.purchase_orders.map((p) => (
+                  <li key={p.id}>
+                    <div className="row"><strong>{names[p.supplier_id] ?? p.supplier_id}</strong><Badge value={p.status} /></div>
+                    <div className="small">Ordered {p.qty_ordered}, confirmed {p.qty_confirmed ?? '—'}, arriving {day(p.expected_delivery)}</div>
+                    {p.notes && <div className="small muted">“{p.notes}”</div>}
+                    <div className="small muted">{p.id}</div>
+                  </li>
+                ))}
+                {run.transfers?.map((t) => (
+                  <li key={t.id}>
+                    <div className="row"><strong>Transfer from {t.from_node}</strong><Badge value={t.status} /></div>
+                    <div className="small">{t.qty} units, arriving {day(t.eta)}</div>
+                  </li>
+                ))}
+              </ul>
+            </section>
           )}
-
-          {!!run.purchase_orders.length && (
-            <div className="card">
-              <h3>Purchase orders &amp; supplier answers</h3>
-              <div className="table-wrap"><table>
-                <thead><tr><th>PO</th><th>Supplier</th><th>Ordered</th><th>Confirmed</th><th>Delivery</th><th>Status</th><th>Supplier said</th></tr></thead>
-                <tbody>{run.purchase_orders.map((p) => (
-                  <tr key={p.id}><td className="mono">{p.id}</td><td>{p.supplier_id}</td><td>{p.qty_ordered}</td>
-                    <td>{p.qty_confirmed ?? '—'}</td><td>{p.expected_delivery}</td><td><Badge value={p.status} /></td>
-                    <td className="small muted">{p.notes}</td></tr>))}</tbody>
-              </table></div>
-            </div>
-          )}
-
-          {!!run.transfers?.length && (
-            <div className="card">
-              <h3>Transfers</h3>
-              <table><thead><tr><th>Id</th><th>From → To</th><th>Qty</th><th>Arrives</th><th>Status</th></tr></thead>
-                <tbody>{run.transfers.map((t) => (
-                  <tr key={t.id}><td className="mono">{t.id}</td><td>{t.from_node} → {t.to_node}</td><td>{t.qty}</td>
-                    <td>{t.eta}</td><td><Badge value={t.status} tone="neutral" /></td></tr>))}</tbody></table>
-            </div>
-          )}
-
-          {verifications.map((v) => (
-            <div className="card" key={v.seq}>
-              <h3>Verification <Badge value={v.name} /></h3>
-              <p className="small">{v.payload.message}</p>
-              {!!v.payload.differences?.length && <ul className="small">{v.payload.differences.map((d: string) => <li key={d}>{d}</li>)}</ul>}
-              <p className="small muted">expected lost {v.payload.expected?.lost_units} · actual lost {v.payload.actual?.lost_units}
-                · actual min stock {v.payload.actual?.min_close} · remaining need {v.payload.residual_need}</p>
-            </div>
-          ))}
-
-          {actual && (
-            <div className="card">
-              <h3>Projection now <span className="muted small">(with the suppliers' real answers)</span></h3>
-              <ProjectionChart projection={actual} />
-            </div>
+          {verifications.length > 0 && (
+            <section className="section">
+              <h2>Result check</h2>
+              <ul className="reasons">
+                {verifications.map((v) => (
+                  <li key={v.seq}>
+                    <Badge value={v.name} />
+                    <p className="small" style={{ marginTop: 4 }}>{v.payload.message}</p>
+                    {!!v.payload.differences?.length && <ul className="small muted">{v.payload.differences.map((x: string) => <li key={x}>{x}</li>)}</ul>}
+                  </li>
+                ))}
+              </ul>
+            </section>
           )}
         </div>
       </div>

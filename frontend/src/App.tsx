@@ -1,4 +1,4 @@
-// App shell with hash routing (static hosting friendly): #/ · #/runs/:id · #/orders · #/evals
+// App shell with hash routing (works on any static host): #/ · #/runs/:id · #/orders · #/evals
 import { useEffect, useState } from 'react'
 import { readApi } from './api/read'
 import { Evals } from './pages/Evals'
@@ -9,7 +9,7 @@ import { ScenarioLauncher } from './pages/ScenarioLauncher'
 function useHash() {
   const [hash, setHash] = useState(window.location.hash || '#/')
   useEffect(() => {
-    const on = () => setHash(window.location.hash || '#/')
+    const on = () => { setHash(window.location.hash || '#/'); window.scrollTo(0, 0) }
     window.addEventListener('hashchange', on)
     return () => window.removeEventListener('hashchange', on)
   }, [])
@@ -18,9 +18,11 @@ function useHash() {
 
 export default function App() {
   const [hash, go] = useHash()
-  const [world, setWorld] = useState<string>('')
+  const [world, setWorld] = useState('')
   useEffect(() => {
-    readApi.world().then((w) => setWorld(`${w.fixture_id} · today ${w.today} (${w.weekday})`)).catch(() => setWorld('no scenario loaded'))
+    readApi.world()
+      .then((w) => setWorld(`Store data as of ${new Date(w.today + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}`))
+      .catch(() => setWorld('No situation loaded yet'))
   }, [hash])
 
   const runMatch = hash.match(/^#\/runs\/(.+)$/)
@@ -33,15 +35,17 @@ export default function App() {
   return (
     <div className="shell">
       <header className="topbar">
-        <div className="brand">AI Purchasing <span>Agent</span></div>
-        <nav className="nav">
-          <a href="#/" className={active('#/')}>Scenarios &amp; runs</a>
-          <a href="#/orders" className={active('#/orders')}>Purchase orders</a>
+        <a className="brand" href="#/" style={{ color: 'inherit', textDecoration: 'none' }}>
+          <img src="/favicon.svg" alt="" />Purchasing desk
+        </a>
+        <nav className="nav" aria-label="Main">
+          <a href="#/" className={active('#/')}>Situations</a>
+          <a href="#/orders" className={active('#/orders')}>Orders</a>
           <a href="#/evals" className={active('#/evals')}>Evaluation</a>
         </nav>
-        <div className="world">{world}</div>
+        <span className="world">{world}</span>
       </header>
-      {page}
+      <main>{page}</main>
     </div>
   )
 }

@@ -1,55 +1,143 @@
-// The agent's run, step by step: LLM turns, tool calls, gates, rulebook, approvals, actions, verification.
+// What the agent did, as the sequence of phases it actually went through:
+// investigate → decide → check the rules → (human approval) → place orders → verify → (re-plan) …
+// Each phase has a one-line summary; its individual steps open on demand.
 import { useState } from 'react'
 import type { TraceStep } from '../../types/api'
 import { Badge } from '../common/Badge'
 import { Json } from '../common/Json'
 
-function headline(s: TraceStep): string {
-  const p = s.payload
+type Key = 'investigate' | 'replan' | 'decide' | 'check' | 'approval' | 'act' | 'verify' | 'outcome'
+const TITLES: Record<Key, string> = {
+  investigate: 'Investigated', replan: 'Re-planned', decide: 'Decided', check: 'Checked the rules',
+  approval: 'Asked a buyer', act: 'Placed orders', verify: 'Checked the result', outcome: 'Finished',
+}
+export const TOOL_WORDS: Record<string, string> = {
+  get_situation: 'the situation', get_sku_profile: 'product details', get_inventory: 'stock on hand',
+  get_open_pos: 'orders already on the way', get_sales_history: 'sales history', get_forecast: 'the forecast',
+  get_promotions: 'promotions', get_supplier_terms: 'supplier terms', get_supplier_performance: 'supplier reliability',
+  get_budget: 'the budget', get_storage_status: 'storage space', get_other_nodes_stock: 'other stores’ stock',
+  check_data_quality: 'data quality', analyze_demand: 'demand vs forecast', compute_requirement: 'the real need',
+  project_inventory: 'a stock projection', generate_options: 'the buying options', validate_plan: 'a rule check (dry run)',
+}
+
+interface Phase { key: Key; steps: TraceStep[] }
+
+function phaseOf(s: TraceStep, replanning: boolean): Key | null {
   switch (s.kind) {
-    case 'llm_message':
-      return p.tool_calls?.length ? `asks: ${p.tool_calls.map((t: any) => t.name).join(', ')}` : `says: ${(p.text || '').slice(0, 120)}`
-    case 'tool_call':
-      return `${s.name}${p.ok ? '' : ' ✗ error'}`
-    case 'decision':
-      return `decision: ${s.name} — ${(p.summary || '').slice(0, 100)}`
-    case 'gate':
-      return p.passed ? 'evidence gate passed' : `evidence gate: ${p.error || 'rejected'}`
-    case 'validation':
-      return p.passed ? (p.requires_approval ? 'rulebook: valid, needs human approval' : 'rulebook: passed') : 'rulebook: REJECTED (hard rule)'
-    case 'approval':
-      return `approval ${s.name}${p.by ? ` by ${p.by}` : ''}`
-    case 'action': {
-      const lines = p.lines || []
-      const nT = lines.filter((l: any) => String(l.supplier_id).startsWith('transfer:')).length
-      const parts = [lines.length - nT ? `${lines.length - nT} PO(s)` : '', nT ? `${nT} transfer(s)` : ''].filter(Boolean).join(' + ')
-      return `placed ${parts}: ${lines.map((l: any) => `${l.po_id} ${l.qty_confirmed}/${l.qty_requested} ${l.status}`).join('; ')}`
-    }
-    case 'verification':
-      return `verification: ${s.name} — ${p.message || ''}`
-    default:
-      return s.name
+    case 'tool_call': return replanning ? 'replan' : 'investigate'
+    case 'llm_message': return s.payload.text?.trim() ? (replanning ? 'replan' : 'investigate') : null
+    case 'decision': case 'gate': return 'decide'
+    case 'validation': return 'check'
+    case 'approval': return 'approval'
+    case 'action': return 'act'
+    case 'verification': return 'verify'
+    case 'info': return s.name === 'supplier_learning' ? 'act' : s.name === 'situation' ? null : 'outcome'
+    case 'error': return 'outcome'
+    default: return null
   }
 }
 
+function group(steps: TraceStep[]): Phase[] {
+  const out: Phase[] = []
+  let replanning = false
+  for (const s of steps) {
+    const key = phaseOf(s, replanning)
+    if (s.kind === 'verification' && s.name === 'UNACCEPTABLE') replanning = true
+    if (s.kind === 'approval' && s.name === 'rejected') replanning = true
+    if (s.kind === 'decision') replanning = false
+    if (!key) continue
+    const last = out[out.length - 1]
+    if (last && last.key === key) last.steps.push(s)
+    else out.push({ key, steps: [s] })
+  }
+  return out
+}
+
+function summary(p: Phase): { text: string; status?: string } {
+  const s = p.steps
+  switch (p.key) {
+    case 'investigate': case 'replan': {
+      const tools = s.filter((x) => x.kind === 'tool_call')
+      const words = [...new Set(tools.map((t) => TOOL_WORDS[t.name] ?? t.name))]
+      const failed = tools.filter((t) => !t.payload.ok).length
+      return { text: `Looked at ${words.join(', ')}.${failed ? ` ${failed} call(s) failed and were retried.` : ''}` }
+    }
+    case 'decide': {
+      const d = [...s].reverse().find((x) => x.kind === 'decision')
+      const gates = s.filter((x) => x.kind === 'gate' && !x.payload.passed)
+      const back = gates.length ? ` The evidence check sent it back ${gates.length} time(s) first.` : ''
+      const said = (d?.payload.summary ?? '').replace(/^(accept|modify|reject|investigate|escalate)\s*:?\s*/i, '')
+      return { text: `${said ? cap(said) : 'Submitted a decision.'}${back}`, status: d?.name }
+    }
+    case 'check': {
+      const v = s[s.length - 1].payload
+      const failed = (v.results ?? []).filter((r: { passed: boolean }) => !r.passed)
+      if (!v.passed) return { text: `Blocked by ${names(failed.filter((r: { kind: string }) => r.kind === 'hard'))}.`, status: 'rejected' }
+      if (v.requires_approval) return { text: `Allowed, but needs a buyer’s approval for ${names(failed)}.`, status: 'pending' }
+      return { text: `All ${(v.results ?? []).length} rules passed.`, status: 'passed' }
+    }
+    case 'approval': {
+      const last = s[s.length - 1]
+      return { text: last.name === 'requested' ? `Waiting: ${(last.payload.reasons ?? []).join('; ')}` : `${cap(last.name)} by ${last.payload.by ?? 'a buyer'}.`, status: last.name === 'requested' ? 'pending' : last.name }
+    }
+    case 'act': {
+      const a = s.find((x) => x.kind === 'action')?.payload
+      const lines = (a?.lines ?? []).map((l: { supplier_id: string; po_id: string; qty_confirmed: number; qty_requested: number }) =>
+        l.supplier_id.startsWith('transfer:') ? `moved ${l.qty_confirmed} from ${l.supplier_id.slice(9)}`
+          : `${l.po_id}: ${l.supplier_id} confirmed ${l.qty_confirmed} of ${l.qty_requested}`)
+      return { text: lines.join('; ') || 'Placed orders.' }
+    }
+    case 'verify': {
+      const v = s[s.length - 1]
+      return { text: v.payload.message ?? '', status: v.name }
+    }
+    case 'outcome': {
+      const e = s.find((x) => x.name === 'escalated' || x.kind === 'error')
+      const f = s.find((x) => x.name === 'finished')
+      return { text: e ? (e.payload.reason ?? e.payload.error) : '', status: f?.payload.status ?? (e ? 'failed' : undefined) }
+    }
+  }
+}
+
+const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1)
+const names = (rs: { rule: string }[]) => rs.map((r) => r.rule.replaceAll('_', ' ')).join(', ') || '—'
+
+function stepLabel(s: TraceStep): string {
+  if (s.kind === 'tool_call') return `${TOOL_WORDS[s.name] ? cap(TOOL_WORDS[s.name]) : s.name}${s.payload.ok ? '' : ' (error)'}`
+  if (s.kind === 'llm_message') return `Model note: ${(s.payload.text || '').slice(0, 140)}`
+  if (s.kind === 'gate') return s.payload.passed ? 'Evidence check passed' : `Evidence check: ${s.payload.error}`
+  return `${cap(s.kind)}: ${s.name.replaceAll('_', ' ')}`
+}
+
 export function TraceTimeline({ steps }: { steps: TraceStep[] }) {
-  const [open, setOpen] = useState<number | null>(null)
-  // an LLM turn that only requests tools is shown by the tool steps themselves; keep turns with text
-  const visible = steps.filter((s) => s.kind !== 'llm_message' || (s.payload.text || '').trim())
-  if (!steps.length) return <p className="muted">Waiting for the first step…</p>
+  const [openPhase, setOpenPhase] = useState<number | null>(null)
+  const [openStep, setOpenStep] = useState<number | null>(null)
+  const phases = group(steps)
+  if (!phases.length) return <p className="muted">Starting…</p>
   return (
-    <ul className="timeline">
-      {visible.map((s) => (
-        <li key={s.seq} className={`k-${s.kind}`}>
-          <div className="head" onClick={() => setOpen(open === s.seq ? null : s.seq)}>
-            <span className="state">#{s.seq} {s.state}</span>
-            {s.kind === 'verification' && <Badge value={s.name} />}
-            {s.kind === 'validation' && <Badge value={s.payload.passed ? (s.payload.requires_approval ? 'pending' : 'passed') : 'rejected'} />}
-            <span>{headline(s)}</span>
-          </div>
-          {open === s.seq && <Json value={s.payload} />}
-        </li>
-      ))}
-    </ul>
+    <ol className="phases">
+      {phases.map((p, i) => {
+        const sm = summary(p)
+        return (
+          <li className="phase" key={i}>
+            <h3>{TITLES[p.key]} {sm.status && <Badge value={sm.status} />}</h3>
+            <p className="summary">{sm.text}</p>
+            <button className="link small" onClick={() => setOpenPhase(openPhase === i ? null : i)} aria-expanded={openPhase === i}>
+              {openPhase === i ? 'Hide steps' : `Show ${p.steps.length} step${p.steps.length > 1 ? 's' : ''}`}
+            </button>
+            {openPhase === i && (
+              <ul className="steps">
+                {p.steps.map((s) => (
+                  <li key={s.seq}>
+                    <button className="link" onClick={() => setOpenStep(openStep === s.seq ? null : s.seq)}>{stepLabel(s)}</button>
+                    {openStep === s.seq && <Json value={s.payload} />}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </li>
+        )
+      })}
+    </ol>
   )
 }

@@ -118,6 +118,7 @@ export interface ProjectionDay {
   date: string
   day: number
   available: number
+  receipts?: number
   demand: number
   lost: number
   expired: number
