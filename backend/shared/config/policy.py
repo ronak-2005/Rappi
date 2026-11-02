@@ -32,7 +32,7 @@ class HardRules(BaseModel):
 class SoftRules(BaseModel):
     po_value_over: float = 2000
     increase_over_recommendation_pct: float = 30
-    express_premium_total_over: float = 100
+    express_premium_total_over: float = 150
     min_supplier_fill_rate: float = 0.85
 
 

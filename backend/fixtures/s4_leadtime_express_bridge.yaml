@@ -3,7 +3,7 @@ scenario: S4
 title: "Standard delivery arrives after we run out"
 description: >
   The quantity (1,020) is right, but standard delivery takes 3 days and stock runs out on day 1.
-  Express (1 day) costs $0.30 more per unit. The agent should buy only a small express bridge and
+  Express (1 day) costs $0.30 more per unit. The agent should buy only an express bridge and
   the rest at standard speed, not all-express and not all-standard.
 today: 2026-11-02
 now_hour: 10
@@ -47,7 +47,9 @@ expected:
   notes: |
     Need = 1000 + 157 − 150 = 1007 → 1020.
     Standard only (arrives day 3): day 0 close 50; day 1 short 50; day 2 short 100 → 150 lost sales.
-    Bridge: express arrives day 1; covers days 1–2 (200) minus 50 left → 150 → case 20 → 160.
-    Standard: 1020 − 160 = 860 on day 3. Day 3 storage = 10 + 860 = 870 L ≤ 1400 L.
-    Express premium = 160 × 0.30 = $48 (≤ $100 approval threshold); all-express = $306 → needs approval.
+    Bridge must keep stock ≥ safety stock until the standard delivery (not just ≥ 0):
+      express arrives day 1 with 50 left; days 1–2 demand 200; day-2 close must be ≥ 157
+      → bridge ≥ 200 + 157 − 50 = 307 → case 20 → 320.
+    Standard: 1020 − 320 = 700 on day 3. Day 3 storage = 170 + 700 = 870 L ≤ 1400 L.
+    Express premium = 320 × 0.30 = $96 (≤ $150 approval threshold); all-express = $306 → needs approval.
     Day-9 close = 150 + 1020 − 1000 = 170 ≥ 157.

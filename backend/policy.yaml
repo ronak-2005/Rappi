@@ -21,7 +21,7 @@ hard_rules:
 soft_rules:                      # breaking any of these needs human approval
   po_value_over: 2000            # total value of the plan
   increase_over_recommendation_pct: 30   # spending MORE than the system suggested
-  express_premium_total_over: 100
+  express_premium_total_over: 150
   min_supplier_fill_rate: 0.85
 
 loop_limits:
