@@ -31,6 +31,10 @@ REQUIRED: dict[str, dict[str, set[str]]] = {
 
 def check(decision: Decision, successful_calls: dict[str, str], trigger_type: str = "recommendation") -> dict | None:
     """successful_calls: tool_call_id → tool name. Returns None if OK, else an error for the model."""
+    if decision.type == "reject" and trigger_type != "recommendation":
+        return {"error": "'reject' only applies to a recommendation",
+                "fix": "use 'accept' for 'no further action needed' (keep the current plan), 'modify' to act, "
+                       "or 'escalate'"}
     called = set(successful_calls.values())
     missing = sorted(REQUIRED[trigger_type][decision.type] - called)
     cited = [e for r in decision.reasons for e in r.evidence]

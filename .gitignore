@@ -10,6 +10,8 @@ llm.env
 backend/var/*
 !backend/var/.gitkeep
 backend/evals/llm/
+backend/evals/reports/*
+!backend/evals/reports/.gitkeep
 
 # python
 __pycache__/

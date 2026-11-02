@@ -35,7 +35,7 @@ ENV ?= llm.env
 llm-check:
 	cd backend && .venv/bin/python -m evals.llm_check $(ENV)
 
-## List the model ids an endpoint offers:  make llm-models ENV=llm-examples/groq.env
+## List the model ids an endpoint offers:  make llm-models ENV=llm-examples/gemini.env
 llm-models:
 	cd backend && .venv/bin/python -m evals.llm_check $(ENV) --models
 

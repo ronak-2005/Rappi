@@ -25,7 +25,8 @@ soft_rules:                      # breaking any of these needs human approval
   min_supplier_fill_rate: 0.85
 
 loop_limits:
-  max_tool_calls: 25
+  max_tool_calls: 25             # per planning round: resets when re-planning or after a human rejection
+  max_total_tool_calls: 60       # whole run
   max_revisions: 2               # validator rejections before escalation
   max_replans: 2                 # failed verifications before escalation
   max_llm_format_retries: 2

@@ -1,5 +1,5 @@
 """Structured JSON logs. Every line carries service, component (folder) and run_id, so a log line
-points straight at the code that wrote it (see docs/structure.md debug map)."""
+points straight at the code that wrote it."""
 
 import json
 import logging

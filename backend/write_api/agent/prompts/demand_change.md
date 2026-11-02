@@ -6,4 +6,6 @@ Determine whether the purchasing plan needs to change. Look at the evidence firs
 days, promotions, and `analyze_demand`. Decide which demand to plan on (the forecast, or a different level
 for some or all of the horizon) and why. Then check coverage with the calculator tools on that demand and
 call `submit_decision`: `accept` = the current plan (stock + open orders) is enough; `modify` = additional
-order lines/transfers, with your `demand_assumption`.
+order lines/transfers, with your `demand_assumption`. (`reject` does not apply to a demand alert.)
+Required before deciding, whatever you conclude: `get_sales_history` (the raw daily numbers),
+`get_promotions`, `analyze_demand`, `get_inventory`, `get_open_pos`.

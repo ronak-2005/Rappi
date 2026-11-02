@@ -19,7 +19,9 @@ class LLMSettings(BaseSettings):
     llm_temperature: float = 0.0
     llm_max_tokens: int = 4096
     llm_timeout_s: float = 60.0
-    llm_max_retries: int = 2  # retries with backoff on 429 / 5xx (free tiers: use 5+)
+    llm_max_retries: int = 2  # SDK retries with short backoff on 429 / 5xx
+    llm_min_interval_s: float = 0.0  # pace calls for per-minute limits (e.g. 7 for a 10-requests/min free tier)
+    llm_rate_limit_waits: int = 0  # extra long waits (up to 60 s each) on per-minute 429s; per-day limits never wait
 
     @property
     def label(self) -> str:

@@ -10,6 +10,7 @@ class ToolCall:
     id: str
     name: str
     arguments: str  # raw JSON text as produced by the model (validated by our code, not trusted)
+    extra: dict = field(default_factory=dict)  # provider-specific fields on the call; echoed back unchanged
 
 
 @dataclass

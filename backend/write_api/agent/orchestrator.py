@@ -78,6 +78,7 @@ class _Ctx:
     executions: list[dict] = field(default_factory=list)
     verifications: list[dict] = field(default_factory=list)
     decisions: list[dict] = field(default_factory=list)
+    round_start: int = 0  # run.tool_calls when the current planning round began
 
 
 class Orchestrator:
@@ -156,8 +157,10 @@ class Orchestrator:
     def _loop(self, c: _Ctx) -> None:
         self._set(c, status="running", state="INVESTIGATE")
         while True:
-            if c.run.tool_calls >= self.limits.max_tool_calls:
-                return self._escalate(c, f"tool-call budget of {self.limits.max_tool_calls} exhausted without a decision")
+            used = c.run.tool_calls - c.round_start
+            if used >= self.limits.max_tool_calls or c.run.tool_calls >= self.limits.max_total_tool_calls:
+                return self._escalate(c, f"tool-call budget exhausted without a decision ({used} this round, "
+                                         f"{c.run.tool_calls} in total)")
             resp = self._chat(c)
             c.messages.append(_assistant_message(resp))
             self._step(c, "llm_message", "assistant", {"text": resp.text, "tool_calls": [
@@ -204,7 +207,11 @@ class Orchestrator:
         self._step(c, "tool_call", tc.name, {"id": tc.id, "arguments": tc.arguments, "ok": out.ok,
                                              "result": out.result})
         # the model can't see provider-assigned call ids, so each result carries its own id to cite as evidence
-        self._tool_reply(c, tc.id, {"evidence_id": tc.id, **out.result})
+        reply = {"evidence_id": tc.id, **out.result}
+        left = self.limits.max_tool_calls - (c.run.tool_calls - c.round_start)
+        if left <= 5:
+            reply["budget_warning"] = f"{left} tool call(s) left in this round: submit_decision (or escalate) soon"
+        self._tool_reply(c, tc.id, reply)
 
     # ------------------------------------------------------------------ decisions
     def _terminal(self, c: _Ctx, tc) -> str:
@@ -311,6 +318,7 @@ class Orchestrator:
         if a.status == "rejected":
             note = f" Their comment: \"{a.comment}\"" if a.comment else ""
             c.messages.append({"role": "user", "content": prompt("approval_rejected", comment=note)})
+            c.round_start = c.run.tool_calls
             self._set(c, status="running", state="INVESTIGATE")
             return "continue"
         lines = [PlanLine.model_validate(x) for x in a.plan["lines"]]
@@ -359,6 +367,7 @@ class Orchestrator:
                            for ln in result.lines)
         c.messages.append({"role": "user", "content": prompt(
             "replan", report=json.dumps(report.model_dump(), indent=1), placed=placed)})
+        c.round_start = c.run.tool_calls  # a new planning round gets a fresh tool budget
         self._set(c, status="running", state="REPLAN")
         self._save(c)
         return "continue"
@@ -387,7 +396,8 @@ class Orchestrator:
     def _chat(self, c: _Ctx) -> LLMResponse:
         resp = self.d.llm.chat(c.messages, self.tool_schemas)
         self._jsonl(c, "llm_calls", {"at": _now(), "messages": len(c.messages), "text": resp.text,
-                                     "tool_calls": [t.__dict__ for t in resp.tool_calls], "usage": resp.usage})
+                                     "tool_calls": [{"id": t.id, "name": t.name, "arguments": t.arguments} for t in resp.tool_calls],
+                                     "usage": resp.usage})
         return resp
 
     def _tool_reply(self, c: _Ctx, call_id: str, result: dict) -> None:
@@ -415,7 +425,8 @@ class Orchestrator:
     def _save(self, c: _Ctx) -> None:
         mem = dict(c.run.memory)
         mem.update(messages=c.messages, called=c.called, format_retries=c.format_retries, pending=c.pending,
-                   executions=c.executions, verifications=c.verifications, decisions=c.decisions)
+                   executions=c.executions, verifications=c.verifications, decisions=c.decisions,
+                   round_start=c.round_start)
         self._set(c, memory=mem)
 
     def _load(self, s: Session, run_id: str) -> _Ctx:
@@ -424,13 +435,14 @@ class Orchestrator:
         return _Ctx(run=run, session=s, messages=list(mem["messages"]), called=dict(mem["called"]),
                     format_retries=mem.get("format_retries", 0), pending=mem.get("pending"),
                     executions=list(mem.get("executions", [])), verifications=list(mem.get("verifications", [])),
-                    decisions=list(mem.get("decisions", [])))
+                    decisions=list(mem.get("decisions", [])), round_start=mem.get("round_start", 0))
 
 
 def _assistant_message(resp: LLMResponse) -> dict:
     msg: dict = {"role": "assistant", "content": resp.text or None}
     if resp.tool_calls:
-        msg["tool_calls"] = [{"id": t.id, "type": "function", "function": {"name": t.name, "arguments": t.arguments}}
+        msg["tool_calls"] = [{"id": t.id, "type": "function", "function": {"name": t.name, "arguments": t.arguments},
+                              **t.extra}  # provider extras (e.g. reasoning signatures) must round-trip
                              for t in resp.tool_calls]
     return msg
 

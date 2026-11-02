@@ -37,7 +37,8 @@ class SoftRules(BaseModel):
 
 
 class LoopLimits(BaseModel):
-    max_tool_calls: int = 25
+    max_tool_calls: int = 25  # per planning round (resets on re-plan / human rejection)
+    max_total_tool_calls: int = 60  # whole run
     max_revisions: int = 2
     max_replans: int = 2
     max_llm_format_retries: int = 2

@@ -105,6 +105,8 @@ def test_tool_budget_is_enforced(stack):
     orch, run_id, deps = stack("s1_accept", [call("get_inventory", {}, f"c{i}") for i in range(40)])
     run = orch.run(run_id)
     assert run.status == "escalated" and run.tool_calls == deps.policy.loop_limits.max_tool_calls
+    warned = [m for m in run.memory["messages"] if m["role"] == "tool" and "budget_warning" in m["content"]]
+    assert len(warned) == 6  # warned at 5, 4, 3, 2, 1 and 0 calls left
 
 
 def test_unknown_tool_does_not_crash(stack, db_file):
@@ -157,3 +159,11 @@ def test_tool_call_written_as_text_is_recovered():
                              {"get_inventory", "submit_decision"})
     assert [(c.name, c.arguments) for c in calls] == [("get_inventory", '{"node": "CHAP"}')]
     assert _calls_from_text('{"name": "rm_rf", "arguments": {}}', {"get_inventory"}) == []
+
+
+def test_provider_extra_fields_round_trip():
+    from write_api.agent.orchestrator import _assistant_message
+    from write_api.llm.client import LLMResponse, ToolCall
+    sig = {"extra_content": {"google": {"thought_signature": "abc"}}}
+    msg = _assistant_message(LLMResponse(tool_calls=[ToolCall(id="c1", name="get_inventory", arguments="{}", extra=sig)]))
+    assert msg["tool_calls"][0]["extra_content"] == sig["extra_content"]  # sent back unchanged next turn
