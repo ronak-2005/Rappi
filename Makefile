@@ -1,0 +1,32 @@
+PY      := backend/.venv/bin/python
+PIP     := backend/.venv/bin/pip
+
+.PHONY: setup dev test eval build-frontend clean
+
+## Install backend (venv) and frontend (npm) dependencies; create env files if missing
+setup:
+	python3 -m venv backend/.venv
+	$(PIP) install -q -e "backend[dev]"
+	@test -f backend/.env || cp backend/.env.example backend/.env
+	@test -f backend/llm.env || cp backend/llm.env.example backend/llm.env
+	cd frontend && npm install
+
+## Run read_api :8001, write_api :8002, mock_supplier :8003 and the frontend :5173
+dev:
+	./scripts/dev.sh
+
+## Unit, API, agent (scripted LLM) and architecture tests — no API key needed
+test:
+	cd backend && .venv/bin/pytest -q
+
+## Agent evaluation. Example: make eval LLM_ENVS="llm.env evals/llm/other.env" REPEATS=3
+LLM_ENVS ?= llm.env
+REPEATS  ?= 3
+eval:
+	cd backend && .venv/bin/python -m evals.run_evals --llm-envs $(LLM_ENVS) --repeats $(REPEATS)
+
+build-frontend:
+	cd frontend && npm run build
+
+clean:
+	rm -rf backend/var/*.db backend/var/logs backend/var/runs

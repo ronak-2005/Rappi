@@ -1,0 +1,29 @@
+# secrets — never commit
+.env
+llm.env
+*.env
+!*.env.example
+!.env.example
+!llm.env.example
+
+# runtime output
+backend/var/*
+!backend/var/.gitkeep
+backend/evals/llm/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+build/
+
+# node
+node_modules/
+frontend/dist/
+
+# editors / os
+.vscode/
+.idea/
+.DS_Store

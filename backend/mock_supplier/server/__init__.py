@@ -1,0 +1,1 @@
+"""Mock supplier process boot."""
