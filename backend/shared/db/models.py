@@ -195,6 +195,7 @@ class AgentRun(SQLModel, table=True):
     tool_calls: int = 0
     revisions: int = 0
     replans: int = 0
+    memory: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))  # conversation + pending state
     started_at: datetime
     finished_at: Optional[datetime] = None
     error: Optional[str] = None

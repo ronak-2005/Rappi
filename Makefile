@@ -1,7 +1,7 @@
 PY      := backend/.venv/bin/python
 PIP     := backend/.venv/bin/pip
 
-.PHONY: setup dev test eval build-frontend clean
+.PHONY: setup dev test smoke eval build-frontend clean
 
 ## Install backend (venv) and frontend (npm) dependencies; create env files if missing
 setup:
@@ -18,6 +18,10 @@ dev:
 ## Unit, API, agent (scripted LLM) and architecture tests — no API key needed
 test:
 	cd backend && .venv/bin/pytest -q
+
+## Start the real services, run one scenario with the no-key baseline, print the outcome
+smoke:
+	./scripts/smoke.sh
 
 ## Agent evaluation. Example: make eval LLM_ENVS="llm.env evals/llm/other.env" REPEATS=3
 LLM_ENVS ?= llm.env
