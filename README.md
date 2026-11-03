@@ -461,11 +461,42 @@ indicative, not as precise rates.
 
 ---
 
-## Limitations / next steps
+## Limitations and future work
+
+What is limited today:
 - **Censored demand isn't acted on.** When sales drop because shelves were empty, acting would mean
   reducing or cancelling an open PO, and there is no such action yet.
 - **Shared constraints are simplified.** Storage and budget are shared across SKUs only through a fixed
   "other SKUs" occupancy; there is no joint multi-SKU optimisation.
 - **Small live sample.** Free-tier quotas limited the live evaluation to one repeat per scenario.
+- **Missing safety extras.** These are described in the safety section: untrusted-text marking, API
+  login, a global spend cap, an approval timeout and a per-product run lock.
+
+Future work:
+- **Local models with Ollama.** The client already works with Ollama: set
+  `LLM_BASE_URL=http://localhost:11434/v1`, `LLM_API_KEY=ollama` and a local model in `llm.env`, with no
+  code change. The next step is to run the evaluation on a few local models that support tool calling,
+  report their pass rates next to the cloud models, and tune pacing and timeouts for local hardware.
+  This gives a fully offline, no-cost option, and keeps store data on your own machine.
+- **One specialist model per task, with a master coordinating them.**
+  - Today one model does every judgement step, and code (the orchestrator) controls the flow. The next
+    version would give each job its own specialist with its own short prompt and only the tools it
+    needs:
+    - an *investigator* that gathers facts;
+    - a *demand analyst* that reads sales, promotions and the forecast;
+    - a *supplier-message reader* that turns emails into structured facts;
+    - a *planner* that chooses between the engine's options;
+    - a *critic* that challenges the plan before it is submitted.
+  - A *master* agent would decide which specialist to call, combine their findings and hand in the
+    final decision.
+  - The specialists can be the same model with different instructions, or smaller and cheaper models
+    for the simple jobs.
+  - The safety design stays exactly as it is: the master still only *submits* a decision, and the
+    evidence gate, hard and soft rules, human approval and verification still decide what actually
+    happens.
+  - The evaluation would compare one model against the specialist team, on pass rate, cost and time,
+    before making the switch.
+- **Upcoming promotions and seasonality.** Buy ahead of a planned promotion, and add seasonal patterns
+  to the demand analysis.
 
 Every push is tagged `checkpoint-NN-<name>` (`git tag`), so any stage can be checked out and run.
